@@ -56,9 +56,11 @@ namespace CraneBay.Game
         float autosaveTimer, hudTimer, reeferTimer, contractTimer, saveSoonTimer = -1f;
         int lastScreenW, lastScreenH;
         PortTheme appliedTheme = (PortTheme)(-1);
+        bool levelPendingShown;
 
         public float CraneSpeedMultiplier => Model.CraneMultiplier(TimeUtil.NowUnix);
         public bool SoundMuted => audioManager.Muted;
+        public string SoundLabel => audioManager.ModeLabel;
 
         // =====================================================================
         // Démarrage
@@ -215,6 +217,12 @@ namespace CraneBay.Game
                 kv.Value.SetPatience(PortModel.PatienceRatio(kv.Key, now));
                 kv.Value.SetFast(PortModel.FastBonusActive(kv.Key, now));
             }
+
+            // Barre d'XP pleine : le niveau attend que les véhicules présents soient servis.
+            bool pending = Model.LevelUpPending;
+            if (pending && !levelPendingShown)
+                Feedback(Sfx.Upgrade, "Barre d'XP pleine ! Servez les camions et trains présents pour passer au niveau " + (Model.PlayerLevel + 1));
+            levelPendingShown = pending;
 
             // Frigorifiques débranchés : la valeur affichée baisse.
             Model.UpdateReefers(dt);

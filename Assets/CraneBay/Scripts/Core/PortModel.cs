@@ -478,6 +478,14 @@ namespace CraneBay.Core
                 if (v.state == VehicleState.EnAttente && now >= v.deadlineUnix) StartLeaving(v, now);
             }
 
+            // Niveau en attente : il est validé dès que les véhicules présents sont partis
+            // ou servis. En attendant, aucun nouveau véhicule n'arrive.
+            if (LevelUpPending)
+            {
+                TryLevelUp(now);
+                return null;
+            }
+
             RefillUpcoming(rng);
             if (now < nextVehicleUnix) return null;
 
@@ -675,11 +683,48 @@ namespace CraneBay.Core
             TerminalReset?.Invoke();
         }
 
-        /// <summary>Ajoute de l'XP et gère les passages de niveau. Renvoie le nombre de niveaux gagnés.</summary>
+        /// <summary>
+        /// La barre d'XP est pleine mais le niveau n'est pas encore validé :
+        /// il faut d'abord servir (ou laisser partir) les camions et trains présents.
+        /// </summary>
+        public bool LevelUpPending => !IsMaxLevel && Data.xp >= LevelRules.XpToNext(Data.level);
+
+        /// <summary>Un camion ou un train présent attend encore des conteneurs.</summary>
+        public bool VehiclesWaiting
+        {
+            get
+            {
+                foreach (var v in vehicles) if (v.state != VehicleState.Depart && !v.AllFilled) return true;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Valide un passage de niveau en attente dès que plus aucun véhicule n'attend.
+        /// Remet alors le terminal à zéro. Renvoie le nombre de niveaux gagnés.
+        /// </summary>
+        public int TryLevelUp(double now)
+        {
+            int gained = ApplyLevels();
+            if (gained > 0) ResetTerminal(now);
+            return gained;
+        }
+
+        /// <summary>
+        /// Ajoute de l'XP. Le passage de niveau n'a lieu que si aucun camion ou
+        /// train présent n'attend de conteneur ; sinon il reste en attente
+        /// (voir LevelUpPending / TryLevelUp). Renvoie le nombre de niveaux gagnés.
+        /// </summary>
         public int AddXp(int amount)
         {
             if (amount <= 0 || IsMaxLevel) return 0;
             Data.xp += amount;
+            return ApplyLevels();
+        }
+
+        int ApplyLevels()
+        {
+            if (!LevelUpPending || VehiclesWaiting) return 0;
             int gained = 0;
             while (!IsMaxLevel && Data.xp >= LevelRules.XpToNext(Data.level))
             {

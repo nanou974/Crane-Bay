@@ -28,6 +28,8 @@ static class Program
         ReefersAndBonus();
         UpcomingAndContracts();
         AmbienceThemesRecords();
+        LevelUpWaitsForVehicles();
+        Music();
         Console.WriteLine(failures == 0 ? $"OK : {checks} vérifications réussies" : $"{failures}/{checks} vérifications en échec");
         return failures == 0 ? 0 : 1;
     }
@@ -291,6 +293,64 @@ static class Program
         Check(m.Data.upgrades[0] == 2 && m.Data.money > 0, "argent et améliorations conservés");
         foreach (var veh in m.vehicles) Check(veh.state == VehicleState.Depart, "tous les véhicules repartent");
         Check(m.UpdateShip(now + 5, rng) && m.Data.ship.TotalCount() > 0, "un nouveau navire arrive ensuite");
+    }
+
+    /// <summary>Le niveau n'est validé qu'une fois les camions et trains présents servis (ou partis).</summary>
+    static void LevelUpWaitsForVehicles()
+    {
+        var rng = new Random(21);
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.UpdateShip(now + 2, rng);
+        for (int i = 0; i < 4; i++) Move(m, FirstNonEmpty(m), new Location(LocationKind.Yard, i), now);
+        // Deux véhicules à quai.
+        var present = new List<Vehicle>();
+        for (int t = 0; t < 200 && present.Count < 2; t++)
+        {
+            m.nextVehicleUnix = now;
+            var v = m.UpdateVehicles(now, rng);
+            if (v != null) { m.MarkArrived(v, now); present.Add(v); }
+        }
+        Check(present.Count == 2, "deux véhicules présents");
+        int ups = 0;
+        m.LevelUp += _ => ups++;
+        Check(m.AddXp(LevelRules.XpToNext(1) + 1) == 0 && m.PlayerLevel == 1, "XP pleine mais véhicules présents : niveau en attente");
+        Check(m.LevelUpPending && m.VehiclesWaiting, "attente signalée");
+        // Pas de nouveau véhicule tant que le niveau est en attente.
+        m.nextVehicleUnix = now;
+        Check(m.UpdateVehicles(now + 0.5, rng) == null, "aucun nouveau véhicule pendant l'attente");
+        // Les véhicules repartent (patience écoulée) : le niveau est alors validé.
+        foreach (var v in present) v.deadlineUnix = now;
+        m.UpdateVehicles(now + 1, rng);
+        Check(ups == 1 && m.PlayerLevel == 2 && !m.LevelUpPending, "niveau validé quand plus aucun véhicule n'attend");
+        Check(m.Data.yard.TotalCount() == 0, "terminal remis à zéro après validation");
+    }
+
+    /// <summary>Musique : boucle déterministe, sans saturation, avec un raccord sans claquement.</summary>
+    static void Music()
+    {
+        const int rate = 22050;
+        var a = MusicSynth.Render(rate);
+        var b = MusicSynth.Render(rate);
+        Check(a.Length == MusicSynth.SampleCount(rate) && a.Length > rate * 15, "durée de la boucle");
+        bool same = true, finite = true;
+        float max = 0f, sumSq = 0f;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) same = false;
+            if (float.IsNaN(a[i]) || float.IsInfinity(a[i])) finite = false;
+            max = Math.Max(max, Math.Abs(a[i]));
+            sumSq += a[i] * a[i];
+        }
+        Check(same, "musique identique à chaque lancement");
+        Check(finite && max <= 0.81f && max > 0.5f, "niveau maîtrisé, pas de saturation");
+        float rms = (float)Math.Sqrt(sumSq / a.Length);
+        Check(rms > 0.05f, "la musique n'est pas silencieuse");
+        // Raccord de boucle : le saut entre la fin et le début reste de l'ordre d'un pas normal.
+        float jump = Math.Abs(a[0] - a[a.Length - 1]);
+        float typical = 0f;
+        for (int i = 1; i < a.Length; i++) typical = Math.Max(typical, Math.Abs(a[i] - a[i - 1]));
+        Check(jump <= typical, "raccord de boucle sans claquement");
     }
 
     static Location Y(int slot) => new Location(LocationKind.Yard, slot);
