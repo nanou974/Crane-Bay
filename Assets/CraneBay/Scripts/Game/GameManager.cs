@@ -104,6 +104,8 @@ namespace CraneBay.Game
             Model.ShipDeparting += () => ship.Leave();
             Model.VehicleSpawned += OnVehicleSpawned;
             Model.VehicleLeaving += OnVehicleLeaving;
+            Model.LevelUp += OnLevelUp;
+            Model.TerminalReset += OnTerminalReset;
 
             // État chargé : parc et, éventuellement, navire déjà à quai.
             RebuildYardViews();
@@ -277,6 +279,53 @@ namespace CraneBay.Game
             }
         }
 
+        // =====================================================================
+        // Niveaux du joueur
+        // =====================================================================
+
+        void OnLevelUp(LevelUpInfo info)
+        {
+            string msg = "NIVEAU " + info.newLevel + " !  +" + Hud.FormatMoney(info.reward);
+            if (info.unlockedColor >= 0)
+                msg += "\nNouveau : conteneurs " + GameRules.ColorNames[info.unlockedColor].ToLowerInvariant()
+                       + "s (" + GameRules.ColorValues[info.unlockedColor] + " $)";
+            else if (LevelRules.ExtraCargo(info.newLevel) > LevelRules.ExtraCargo(info.newLevel - 1))
+                msg += "\nLes navires arrivent plus chargés";
+            msg += "\nLe terminal repart à zéro !";
+            Feedback(Sfx.Chest, msg);
+            hud.Refresh(TimeUtil.NowUnix);
+            SaveSoon();
+        }
+
+        /// <summary>
+        /// Passage de niveau : le modèle a vidé le parc et le navire. On efface
+        /// les conteneurs affichés, on annule les ordres de la grue, le navire
+        /// et les véhicules s'en vont. Le conteneur qui vient d'être livré reste
+        /// sur son véhicule (il part avec lui).
+        /// </summary>
+        void OnTerminalReset()
+        {
+            crane.CancelPending();
+            ClearSelection();
+            if (dragGhost != null) { Destroy(dragGhost.gameObject); dragGhost = null; }
+
+            var onVehicles = new HashSet<int>();
+            foreach (var view in vehicleViews.Values)
+                foreach (var cv in view.Loaded) if (cv != null) onVehicles.Add(cv.Info.id);
+            var toRemove = new List<int>();
+            foreach (var kv in containerViews)
+            {
+                if (onVehicles.Contains(kv.Key)) continue;
+                if (kv.Value != null && kv.Value != crane.Carried) Destroy(kv.Value.gameObject);
+                toRemove.Add(kv.Key);
+            }
+            foreach (var id in toRemove) containerViews.Remove(id);
+
+            if (ship.Current == ShipView.State.Docked || ship.Current == ShipView.State.Arriving) ship.Leave();
+            foreach (var view in vehicleViews.Values) view.Leave(0.6f);
+            SaveSoon();
+        }
+
         bool TryGetVehicleView(Location loc, out VehicleView view, out int cargoIndex)
         {
             view = null; cargoIndex = 0;
@@ -400,6 +449,8 @@ namespace CraneBay.Game
                 audioManager.Play(Sfx.Drop, 0.7f);
                 audioManager.Play(Sfx.Coin);
                 floating.Spawn(vehicleView.CargoWorld(idx) + new Vector3(0f, 0.6f, 0f), "+" + Hud.FormatMoney(r.earned), Palette.UiGold);
+                if (r.xp > 0)
+                    floating.Spawn(vehicleView.CargoWorld(idx) + new Vector3(0f, 0.05f, 0f), "+" + r.xp + " XP", new Color(0.55f, 0.85f, 1f));
                 SaveSoon();
             }
         }

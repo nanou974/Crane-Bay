@@ -75,6 +75,16 @@ namespace CraneBay.Core
         public int earned;          // argent gagné (0 si dépose dans le parc)
         public Vehicle vehicle;     // véhicule servi (null sinon)
         public bool vehicleDone;    // le véhicule est complet et va partir
+        public int xp;              // XP gagnées par cette livraison
+        public int levelsGained;    // nombre de niveaux franchis (0 le plus souvent)
+    }
+
+    /// <summary>Passage de niveau : nouveau niveau, prime, couleur débloquée (-1 si aucune).</summary>
+    public struct LevelUpInfo
+    {
+        public int newLevel;
+        public int reward;
+        public int unlockedColor;
     }
 
     public class PortModel
@@ -99,6 +109,8 @@ namespace CraneBay.Core
         public event Action ShipArrived;
         public event Action ShipDeparting;
         public event Action MoneyChanged;
+        public event Action<LevelUpInfo> LevelUp;
+        public event Action TerminalReset;
 
         public PortModel(SaveData data, double nowUnix)
         {
@@ -113,8 +125,24 @@ namespace CraneBay.Core
 
         public int Level(UpgradeType t) => Data.upgrades[(int)t];
 
-        /// <summary>Somme des niveaux : sert à faire grandir les coffres.</summary>
-        public int Progress => Data.upgrades[0] + Data.upgrades[1] + Data.upgrades[2];
+        /// <summary>Somme des niveaux d'amélioration.</summary>
+        public int UpgradeSum => Data.upgrades[0] + Data.upgrades[1] + Data.upgrades[2];
+
+        /// <summary>Progression globale (améliorations + niveau) : fait grandir les coffres.</summary>
+        public int Progress => UpgradeSum + (Data.level - 1);
+
+        public int PlayerLevel => Data.level;
+        public bool IsMaxLevel => Data.level >= LevelRules.MaxLevel;
+
+        /// <summary>Remplissage de la barre d'XP (0..1).</summary>
+        public float XpRatio
+        {
+            get
+            {
+                int need = LevelRules.XpToNext(Data.level);
+                return need <= 0 ? 1f : (float)Math.Min(1.0, (double)Data.xp / need);
+            }
+        }
 
         public bool TurboActive(double now) => now < Data.turboEndUnix;
 
@@ -230,11 +258,15 @@ namespace CraneBay.Core
             res.ok = true;
             res.earned = gain;
             res.vehicle = v;
+            res.xp = LevelRules.XpFor(c.Color, v.kind == VehicleKind.Train);
+            res.levelsGained = AddXp(res.xp);
             if (v.AllFilled)
             {
                 res.vehicleDone = true;
                 StartLeaving(v, now);
             }
+            // Nouveau niveau : le terminal repart de zéro.
+            if (res.levelsGained > 0) ResetTerminal(now);
             return res;
         }
 
@@ -257,8 +289,8 @@ namespace CraneBay.Core
         {
             var ship = new StackGrid(GameRules.ShipColumns, GameRules.ShipRows, GameRules.ShipMaxHeight);
             int cargo = rng.Next(GameRules.ShipMinCargo, GameRules.ShipMaxCargo + 1);
-            // Les navires plus "avancés" transportent un peu plus de marchandise.
-            cargo = Math.Min(ship.Capacity, cargo + Progress / 6);
+            // Plus le joueur monte de niveau, plus les navires arrivent chargés.
+            cargo = Math.Min(ship.Capacity, cargo + LevelRules.ExtraCargo(Data.level));
             var free = new List<int>();
             for (int i = 0; i < cargo; i++)
             {
@@ -266,7 +298,7 @@ namespace CraneBay.Core
                 for (int s = 0; s < ship.SlotCount; s++) if (ship.CanPlace(s)) free.Add(s);
                 if (free.Count == 0) break;
                 int slot = free[rng.Next(free.Count)];
-                ship.Place(slot, new ContainerInfo(Data.nextContainerId++, GameRules.RollColor(rng)));
+                ship.Place(slot, new ContainerInfo(Data.nextContainerId++, LevelRules.RollColor(rng, Data.level)));
             }
             Data.ship = ship;
         }
@@ -434,6 +466,47 @@ namespace CraneBay.Core
             Data.money += amount;
             if (amount > 0) Data.totalEarned += amount;
             MoneyChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Remise à zéro du terminal (au passage de niveau) : parc et navire vidés,
+        /// tous les véhicules repartent, un nouveau navire arrive peu après.
+        /// L'argent, les améliorations, le niveau et les coffres sont conservés.
+        /// </summary>
+        public void ResetTerminal(double now)
+        {
+            Data.yard = new StackGrid(GameRules.YardColumns, GameRules.YardRows, GameRules.YardMaxHeight);
+            Data.ship = new StackGrid(GameRules.ShipColumns, GameRules.ShipRows, GameRules.ShipMaxHeight);
+            Data.shipDocked = false;
+            Data.nextShipUnix = now + 4;
+            // Départ silencieux : ce n'est pas une impatience du chauffeur.
+            foreach (var v in vehicles) v.state = VehicleState.Depart;
+            nextVehicleUnix = now + 8;
+            TerminalReset?.Invoke();
+        }
+
+        /// <summary>Ajoute de l'XP et gère les passages de niveau. Renvoie le nombre de niveaux gagnés.</summary>
+        public int AddXp(int amount)
+        {
+            if (amount <= 0 || IsMaxLevel) return 0;
+            Data.xp += amount;
+            int gained = 0;
+            while (!IsMaxLevel && Data.xp >= LevelRules.XpToNext(Data.level))
+            {
+                Data.xp -= LevelRules.XpToNext(Data.level);
+                Data.level++;
+                gained++;
+                var info = new LevelUpInfo
+                {
+                    newLevel = Data.level,
+                    reward = LevelRules.LevelUpReward(Data.level),
+                    unlockedColor = LevelRules.ColorUnlockedAt(Data.level),
+                };
+                AddMoney(info.reward);
+                LevelUp?.Invoke(info);
+            }
+            if (IsMaxLevel) Data.xp = 0;
+            return gained;
         }
 
         public int NextUpgradeCost(UpgradeType t) => GameRules.UpgradeCost(t, Level(t));

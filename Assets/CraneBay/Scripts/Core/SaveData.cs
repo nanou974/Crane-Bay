@@ -23,6 +23,10 @@ namespace CraneBay.Core
         public int delivered;                 // nombre de conteneurs livrés (statistique)
         public int[] upgrades = new int[3];   // index = UpgradeType
 
+        // --- Niveau du joueur ---
+        public int level = 1;
+        public long xp;                       // XP accumulées dans le niveau en cours
+
         // --- Parc et navire ---
         public StackGrid yard;
         public StackGrid ship;
@@ -63,6 +67,9 @@ namespace CraneBay.Core
                 upgrades[i] = Math.Max(0, Math.Min(GameRules.UpgradeMaxLevel, upgrades[i]));
 
             if (money < 0) money = 0;
+            if (level < 1) level = 1;
+            if (level > LevelRules.MaxLevel) level = LevelRules.MaxLevel;
+            if (xp < 0 || level >= LevelRules.MaxLevel) xp = 0;
 
             if (yard == null || !yard.HasShape(GameRules.YardColumns, GameRules.YardRows, GameRules.YardMaxHeight))
                 yard = Reshape(yard, GameRules.YardColumns, GameRules.YardRows, GameRules.YardMaxHeight);

@@ -24,6 +24,17 @@ Gratuit, sans publicité ni achat intégré, distribué en APK hors store.
 enfoui, il faut d'abord déplacer ceux qui sont au-dessus. Un véhicule qui attend trop longtemps (jauge de
 patience) repart à vide.
 
+**Niveaux :** chaque conteneur livré rapporte des XP (1 à 12 selon la couleur, +50 % en train). Quand la
+barre d'XP est pleine, on passe au niveau suivant (30 niveaux, seuil croissant) :
+- prime en argent (50 $ × le nouveau niveau) ;
+- **le terminal se réinitialise** : parc et navire vidés, véhicules renvoyés, un nouveau navire arrive.
+  L'argent, les améliorations et les coffres sont conservés ;
+- de nouvelles couleurs apparaissent : vert au niveau 2, rouge au niveau 4, doré au niveau 6. Au niveau 1,
+  il n'y a que du blanc et du bleu ;
+- les navires arrivent plus chargés : +1 conteneur tous les 3 niveaux.
+
+Les règles sont dans `Core/LevelRules.cs`.
+
 **Coffres :**
 - *Coffre du jour* : toutes les 24 h, de l'argent et parfois un turbo de grue (x2 pendant 5 min).
 - *Coffre 20 min* : de l'argent ou un turbo de 2 min. Il se recharge aussi quand le jeu est fermé.
@@ -100,6 +111,7 @@ Assets/CraneBay/Scripts/
 │   ├── GameRules.cs     Équilibrage : valeurs, améliorations, timers, tailles du parc
 │   ├── StackGrid.cs     Piles de conteneurs : on ne prend que le dessus, hauteur max
 │   ├── PortModel.cs     Règles du terminal : navires, véhicules, demandes, paiement, coffres
+│   ├── LevelRules.cs    Niveaux : XP par couleur, seuils, primes, couleurs débloquées
 │   ├── ChestLogic.cs    Timers de coffres basés sur l'horloge UTC, récompenses
 │   ├── SaveData.cs      Données sauvegardées + réparation des sauvegardes anciennes
 │   └── ContainerTypes.cs
@@ -131,7 +143,7 @@ véhicules se règle dans `PortModel.cs` (`TruckPatience`, `TrainPatience`).
 ### Sauvegarde
 
 Le fichier `cranebay_save.json` est écrit dans `Application.persistentDataPath`. Sur Android, c'est
-`Android/data/com.cranebay.prototype/files/`. Il contient l'argent, les niveaux d'amélioration, le parc,
+`Android/data/com.cranebay.prototype/files/`. Il contient l'argent, le niveau et les XP, les niveaux d'amélioration, le parc,
 le navire à quai, les horodatages des coffres et du prochain navire. La sauvegarde a lieu toutes les
 10 s, après chaque achat ou coffre, et quand l'application passe en arrière-plan.
 

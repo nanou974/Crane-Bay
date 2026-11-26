@@ -15,7 +15,7 @@ namespace CraneBay.Game
 {
     public class Hud : MonoBehaviour
     {
-        public const float TopBarHeight = 210f;
+        public const float TopBarHeight = 250f;
         public const float BottomBarHeight = 340f;
 
         GameManager game;
@@ -23,7 +23,8 @@ namespace CraneBay.Game
         CanvasScaler scaler;
         Rect appliedSafeArea;
 
-        Text moneyText, infoText, turboText, toastText, soundText;
+        Text moneyText, infoText, turboText, toastText, soundText, levelText, xpText;
+        RectTransform xpFill;
         CanvasGroup toastGroup;
         float toastTimer;
         double shownMoney;
@@ -84,12 +85,13 @@ namespace CraneBay.Game
             bar.anchoredPosition = Vector2.zero;
             AddImage(bar.gameObject, SpriteFactory.UiRounded, Palette.UiPanel);
 
-            moneyText = AddText(bar, "Argent", "0 $", 74, Palette.UiGold, TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(36, -18), new Vector2(460, 92));
-            infoText = AddText(bar, "Infos", "", 32, Palette.UiText, TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(40, -112), new Vector2(560, 44));
-            turboText = AddText(bar, "Turbo", "", 32, new Color(1f, 0.55f, 0.2f), TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(40, -154), new Vector2(400, 44));
+            moneyText = AddText(bar, "Argent", "0 $", 72, Palette.UiGold, TextAnchor.MiddleLeft,
+                new Vector2(0, 1), new Vector2(36, -12), new Vector2(460, 88));
+            BuildXpRow(bar);
+            infoText = AddText(bar, "Infos", "", 30, Palette.UiText, TextAnchor.MiddleLeft,
+                new Vector2(0, 1), new Vector2(40, -152), new Vector2(560, 40));
+            turboText = AddText(bar, "Turbo", "", 30, new Color(1f, 0.55f, 0.2f), TextAnchor.MiddleLeft,
+                new Vector2(0, 1), new Vector2(40, -194), new Vector2(560, 40));
 
             // Bouton son.
             var sound = MakeButton(bar, "Son", new Vector2(1, 1), new Vector2(-470, -24), new Vector2(110, 80), Palette.UiButton, out _);
@@ -100,6 +102,24 @@ namespace CraneBay.Game
 
             chests[(int)ChestKind.Quotidien] = BuildChest(bar, "Coffre du jour", new Vector2(-244, -20), ChestKind.Quotidien);
             chests[(int)ChestKind.VingtMinutes] = BuildChest(bar, "Coffre 20 min", new Vector2(-20, -20), ChestKind.VingtMinutes);
+        }
+
+        /// <summary>Ligne "Niv. 3  [barre d'XP]  45 / 120 XP".</summary>
+        void BuildXpRow(RectTransform bar)
+        {
+            levelText = AddText(bar, "Niveau", "Niv. 1", 34, Palette.UiText, TextAnchor.MiddleLeft,
+                new Vector2(0, 1), new Vector2(40, -104), new Vector2(150, 44));
+            var back = NewRect("BarreXP", bar);
+            SetRect(back, new Vector2(0, 1), new Vector2(190, -112), new Vector2(240, 28));
+            AddImage(back.gameObject, SpriteFactory.UiRounded, new Color(0.05f, 0.06f, 0.1f, 1f)).raycastTarget = false;
+            xpFill = NewRect("Remplissage", back);
+            xpFill.anchorMin = Vector2.zero;
+            xpFill.anchorMax = new Vector2(0f, 1f);
+            xpFill.offsetMin = new Vector2(3, 3);
+            xpFill.offsetMax = new Vector2(-3, -3);
+            AddImage(xpFill.gameObject, SpriteFactory.UiRounded, new Color(0.35f, 0.75f, 1f)).raycastTarget = false;
+            xpText = AddText(bar, "XP", "", 26, new Color(1, 1, 1, 0.85f), TextAnchor.MiddleLeft,
+                new Vector2(0, 1), new Vector2(440, -104), new Vector2(170, 44));
         }
 
         ChestUi BuildChest(RectTransform bar, string title, Vector2 pos, ChestKind kind)
@@ -155,12 +175,12 @@ namespace CraneBay.Game
         void BuildToast()
         {
             var rt = NewRect("Message", safeRoot);
-            SetRect(rt, new Vector2(0.5f, 1), new Vector2(0, -TopBarHeight - 24), new Vector2(1000, 90), true);
+            SetRect(rt, new Vector2(0.5f, 1), new Vector2(0, -TopBarHeight - 24), new Vector2(1000, 130), true);
             toastGroup = rt.gameObject.AddComponent<CanvasGroup>();
             toastGroup.blocksRaycasts = false;
             toastGroup.interactable = false;
             AddImage(rt.gameObject, SpriteFactory.UiRounded, new Color(0.12f, 0.14f, 0.2f, 0.85f)).raycastTarget = false;
-            toastText = AddText(rt, "Texte", "", 38, Palette.UiText, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(980, 86), true);
+            toastText = AddText(rt, "Texte", "", 38, Palette.UiText, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(980, 126), true);
             toastGroup.alpha = 0f;
         }
 
@@ -209,6 +229,9 @@ namespace CraneBay.Game
             var m = game.Model;
             infoText.text = (m.Data.shipDocked ? "Navire à quai" : "Navire dans " + ChestLogic.Format(m.SecondsUntilShip(now)).Replace("Prêt !", "0:00"))
                             + "   •   " + m.Data.delivered + " livrés";
+            levelText.text = "Niv. " + m.PlayerLevel;
+            xpFill.anchorMax = new Vector2(m.XpRatio, 1f);
+            xpText.text = m.IsMaxLevel ? "MAX" : m.Data.xp + " / " + LevelRules.XpToNext(m.PlayerLevel) + " XP";
             turboText.text = m.TurboActive(now) ? "TURBO GRUE x2  " + ChestLogic.Format(m.Data.turboEndUnix - now) : "";
 
             for (int i = 0; i < 2; i++)

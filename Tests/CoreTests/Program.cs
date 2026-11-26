@@ -22,6 +22,8 @@ static class Program
         SanitizeSave();
         FullGameLoop();
         VehiclePatienceAndNoDeadlock();
+        PlayerLevels();
+        LevelUpResetsTerminal();
         Console.WriteLine(failures == 0 ? $"OK : {checks} vérifications réussies" : $"{failures}/{checks} vérifications en échec");
         return failures == 0 ? 0 : 1;
     }
@@ -132,6 +134,7 @@ static class Program
         Check(ships >= 1, "au moins un navire est arrivé");
         Check(deliveries > 0, "des conteneurs ont été livrés");
         Check(bought && m.Level(UpgradeType.VitesseGrue) == 1, "une amélioration a été achetée");
+        Check(m.Data.xp > 0 || m.PlayerLevel > 1, "les livraisons rapportent de l'XP");
         Console.WriteLine($"  Partie simulée : {ships} navire(s), {deliveries} livraison(s), argent restant {m.Data.money} $");
     }
 
@@ -197,5 +200,85 @@ static class Program
     {
         for (int s = 0; s < m.Data.ship.SlotCount; s++) if (m.Data.ship.CanPick(s)) return new Location(LocationKind.Ship, s);
         return Location.None;
+    }
+
+    static void PlayerLevels()
+    {
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        Check(m.PlayerLevel == 1 && m.Data.xp == 0, "nouvelle partie au niveau 1");
+        for (int l = 1; l < LevelRules.MaxLevel - 1; l++)
+            Check(LevelRules.XpToNext(l + 1) > LevelRules.XpToNext(l), $"seuil d'XP croissant {l}");
+        Check(LevelRules.XpFor(ContainerColor.Dore, true) > LevelRules.XpFor(ContainerColor.Dore, false), "bonus XP du train");
+
+        var ups = new List<LevelUpInfo>();
+        m.LevelUp += ups.Add;
+        long money0 = m.Data.money;
+        int need = LevelRules.XpToNext(1);
+        Check(m.AddXp(need - 1) == 0 && m.PlayerLevel == 1, "pas de niveau avant le seuil");
+        Check(m.AddXp(1) == 1 && m.PlayerLevel == 2 && m.Data.xp == 0, "passage au niveau 2 au seuil exact");
+        Check(ups.Count == 1 && ups[0].reward == LevelRules.LevelUpReward(2) && m.Data.money == money0 + ups[0].reward, "prime de niveau versée");
+        Check(ups[0].unlockedColor == (int)ContainerColor.Vert, "le vert se débloque au niveau 2");
+        Check(m.AddXp(10_000_000) > 1 && m.IsMaxLevel && m.Data.xp == 0, "plusieurs niveaux d'un coup, plafonné au max");
+        Check(m.AddXp(50) == 0, "plus d'XP au niveau max");
+
+        var rng = new Random(9);
+        bool locked = true;
+        for (int i = 0; i < 2000; i++) if (LevelRules.RollColor(rng, 1) > ContainerColor.Bleu) locked = false;
+        Check(locked, "niveau 1 : seulement blanc et bleu");
+        bool gold = false;
+        for (int i = 0; i < 2000; i++) if (LevelRules.RollColor(rng, 6) == ContainerColor.Dore) gold = true;
+        Check(gold, "niveau 6 : le doré apparaît");
+
+        var d = SaveData.NewGame(now);
+        d.level = 0; d.xp = -3;
+        d.Sanitize(now);
+        Check(d.level == 1 && d.xp == 0, "niveau réparé à la sanitisation");
+    }
+
+    /// <summary>Au passage de niveau, le parc et le navire repartent de zéro (argent et améliorations gardés).</summary>
+    static void LevelUpResetsTerminal()
+    {
+        var rng = new Random(11);
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.UpdateShip(now + 2, rng);
+        // Ranger quelques conteneurs dans le parc.
+        for (int i = 0; i < 3; i++)
+        {
+            var from = FirstNonEmpty(m);
+            Move(m, from, new Location(LocationKind.Yard, i), now);
+        }
+        m.Data.upgrades[0] = 2;
+        // Un camion qui demande la couleur du dessus d'une pile du parc.
+        m.nextVehicleUnix = now;
+        Vehicle v = null;
+        for (int t = 0; t < 50 && v == null; t++) v = m.UpdateVehicles(now, rng);
+        Check(v != null, "un véhicule arrive");
+        m.MarkArrived(v, now);
+        Location src = Location.None, dst = Location.None;
+        for (int i = 0; i < v.demands.Count && src.IsNone; i++)
+        {
+            var to = v.kind == VehicleKind.Train ? new Location(LocationKind.Wagon, i) : new Location(LocationKind.Truck, v.bay);
+            foreach (var kind in new[] { LocationKind.Yard, LocationKind.Ship })
+                for (int s = 0; s < m.GridOf(kind).SlotCount && src.IsNone; s++)
+                {
+                    var f = new Location(kind, s);
+                    if (m.CanMove(f, to)) { src = f; dst = to; }
+                }
+        }
+        Check(!src.IsNone, "une livraison est possible");
+        int resets = 0;
+        m.TerminalReset += () => resets++;
+        // XP juste sous le seuil : la livraison fait passer le niveau.
+        m.Data.xp = LevelRules.XpToNext(1) - 1;
+        var c = m.Pick(src);
+        var r = m.Drop(dst, c, now);
+        Check(r.ok && r.levelsGained == 1 && m.PlayerLevel == 2, "livraison => niveau 2");
+        Check(resets == 1, "remise à zéro déclenchée");
+        Check(m.Data.yard.TotalCount() == 0 && m.Data.ship.TotalCount() == 0 && !m.Data.shipDocked, "parc et navire vides");
+        Check(m.Data.upgrades[0] == 2 && m.Data.money > 0, "argent et améliorations conservés");
+        foreach (var veh in m.vehicles) Check(veh.state == VehicleState.Depart, "tous les véhicules repartent");
+        Check(m.UpdateShip(now + 5, rng) && m.Data.ship.TotalCount() > 0, "un nouveau navire arrive ensuite");
     }
 }

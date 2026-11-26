@@ -90,6 +90,9 @@ namespace CraneBay.Game
             return true;
         }
 
+        /// <summary>Annule les ordres en attente (la mission en cours se termine normalement).</summary>
+        public void CancelPending() => queue.Clear();
+
         float Mult => game.CraneSpeedMultiplier;
 
         void Update()
