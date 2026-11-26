@@ -63,6 +63,7 @@ namespace CraneBay.Game
             game = gm;
             IsMain = main;
             if (main) BuildMain(); else BuildSecond();
+            MakeSeeThrough();
             pos = main ? BoardLayout.CraneRest : BoardLayout.SecondCraneRest;
             ApplyTransforms();
         }
@@ -105,6 +106,24 @@ namespace CraneBay.Game
             SpriteFactory.Make("Chariot", trolley, SpriteFactory.Rounded, color, new Vector2(0.7f, 0.5f), Vector3.zero, order + 1);
             SpriteFactory.Make("Cabine", trolley, SpriteFactory.RoundedSmall, Palette.Window, new Vector2(0.24f, 0.18f), new Vector3(0.14f, 0.09f, 0f), order + 2);
         }
+
+        /// <summary>
+        /// La poutre et le chariot passent au-dessus du parc : on les rend
+        /// semi-transparents pour que la valeur des conteneurs reste lisible.
+        /// Les pieds (hors du parc) restent opaques.
+        /// </summary>
+        void MakeSeeThrough()
+        {
+            foreach (var sr in bridge.GetComponentsInChildren<SpriteRenderer>(true))
+            {
+                if (sr.name == "Pied") continue;
+                var c = sr.color;
+                c.a *= sr.name == "OmbrePoutre" ? 0.5f : SeeThroughAlpha;
+                sr.color = c;
+            }
+        }
+
+        const float SeeThroughAlpha = 0.45f;
 
         /// <summary>Cette grue peut-elle atteindre cet emplacement ? (la 2e grue ne va pas au navire)</summary>
         public bool CanReach(Location loc) => IsMain || loc.kind != LocationKind.Ship;

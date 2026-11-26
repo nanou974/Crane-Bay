@@ -203,7 +203,7 @@ namespace CraneBay.Game
             contracts.onClick.AddListener(TogglePanel);
 
             var sound = MakeButton(strip, "Son", new Vector2(1, 0.5f), new Vector2(-8, 0), new Vector2(96, 66), Palette.UiButton, out _);
-            soundText = AddText((RectTransform)sound.transform, "Texte", "Son", 24, Palette.UiText, TextAnchor.MiddleCenter,
+            soundText = AddText((RectTransform)sound.transform, "Texte", "Son", 20, Palette.UiText, TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96, 66), true);
             sound.onClick.AddListener(() => { game.ToggleSound(); RefreshSound(); });
             RefreshSound();
@@ -356,7 +356,7 @@ namespace CraneBay.Game
             if (panel.activeSelf) RefreshPanel(TimeUtil.NowUnix);
         }
 
-        void RefreshSound() => soundText.text = game.SoundMuted ? "Muet" : "Son";
+        void RefreshSound() => soundText.text = game.SoundLabel;
 
         void Update()
         {
@@ -404,7 +404,7 @@ namespace CraneBay.Game
                             + "   •   " + Ambience.WeatherNames[(int)Ambience.WeatherAt(now)];
             levelText.text = "Niv. " + m.PlayerLevel;
             xpFill.anchorMax = new Vector2(m.XpRatio, 1f);
-            xpText.text = m.IsMaxLevel ? "MAX" : m.Data.xp + " / " + LevelRules.XpToNext(m.PlayerLevel) + " XP";
+            xpText.text = m.IsMaxLevel ? "MAX" : m.LevelUpPending ? "Niveau prêt !" : m.Data.xp + " / " + LevelRules.XpToNext(m.PlayerLevel) + " XP";
             turboText.text = m.TurboActive(now) ? "TURBO GRUE x2  " + ChestLogic.Format(m.Data.turboEndUnix - now) : "";
 
             for (int i = 0; i < 2; i++)

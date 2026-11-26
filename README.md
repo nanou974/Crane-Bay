@@ -28,6 +28,8 @@ patience) repart à vide.
 
 **Niveaux :** chaque conteneur livré rapporte des XP (1 à 12 selon la couleur, +50 % en train). Quand la
 barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis à chaque niveau) :
+- le niveau n'est validé qu'une fois **tous les camions et trains présents servis** (ou partis) : la barre
+  affiche « Niveau prêt ! » et aucun nouveau véhicule n'arrive en attendant ;
 - prime en argent (50 $ × le nouveau niveau) ;
 - **les améliorations coûtent plus cher** : +12 % par niveau de joueur (composé), en plus de la hausse
   propre à chaque niveau d'amélioration ;
@@ -67,6 +69,10 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
 - *Coffre 20 min* : de l'argent ou un turbo de 2 min. Il se recharge aussi quand le jeu est fermé.
 - Le jeu enregistre l'heure UTC de la dernière ouverture, pas un compte à rebours : le timer reste exact
   après une fermeture ou un redémarrage du téléphone.
+
+**Musique :** une boucle d'ambiance tropicale (ukulélé, steel drum, basse, shaker) est
+générée par code au lancement (`Core/MusicSynth.cs`) : pas de fichier audio, donc aucun problème de droits.
+Le bouton « Son » fait défiler : sons + musique, sons seuls, muet.
 
 **Contrôles :** toucher une pile puis toucher la destination, ou glisser-déposer du doigt. Les destinations
 possibles s'allument en vert. Le bouton retour d'Android annule la sélection.
@@ -141,6 +147,7 @@ Assets/CraneBay/Scripts/
 │   ├── PortModel.cs     Règles du terminal : navires, véhicules, demandes, paiement, coffres
 │   ├── LevelRules.cs    Niveaux : XP, seuils, primes, déblocages, thèmes, tirage des conteneurs
 │   ├── Contracts.cs     Contrats du jour
+│   ├── MusicSynth.cs    Musique d'ambiance synthétisée (4 styles, tropical par défaut)
 │   ├── Ambience.cs      Cycle jour/nuit et météo (déterministes, basés sur l'heure)
 │   ├── ChestLogic.cs    Timers de coffres basés sur l'horloge UTC, récompenses
 │   ├── SaveData.cs      Données sauvegardées + réparation des sauvegardes anciennes

@@ -3,8 +3,14 @@
 // Les bruitages sont synthétisés au lancement (pas de fichiers audio) : simples
 // mais "satisfaisants" (clac métallique, pièces, corne de brume...).
 // Un seul AudioSource + PlayOneShot : très léger pour le processeur.
+// La musique d'ambiance (Core/MusicSynth) est calculée sur un thread à part
+// au lancement, puis jouée en boucle sur une seconde source.
+//
+// Le bouton "Son" fait défiler 3 réglages : sons + musique, sons seuls, muet.
 // -----------------------------------------------------------------------------
 using System;
+using System.Threading;
+using CraneBay.Core;
 using UnityEngine;
 
 namespace CraneBay.Game
@@ -15,18 +21,34 @@ namespace CraneBay.Game
     {
         const int Rate = 22050;
         const string MuteKey = "cranebay_mute";
+        const string MusicKey = "cranebay_music";
+        const int MusicRate = 22050;
+        const float MusicVolume = 0.3f;
 
-        AudioSource source;
+        AudioSource source, musicSource;
+        float[] musicData;            // rempli par le thread de calcul
+        volatile bool musicReady;
         AudioClip[] clips;
         float lastCoinTime;
 
         public bool Muted { get; private set; }
+        public bool MusicOn { get; private set; }
 
         void Awake()
         {
             source = gameObject.AddComponent<AudioSource>();
             source.playOnAwake = false;
             Muted = PlayerPrefs.GetInt(MuteKey, 0) == 1;
+            MusicOn = PlayerPrefs.GetInt(MusicKey, 1) == 1;
+
+            musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.playOnAwake = false;
+            musicSource.loop = true;
+            musicSource.volume = MusicVolume;
+            // Calcul de la boucle hors du thread principal : pas d'à-coup au démarrage.
+            var worker = new Thread(() => { musicData = MusicSynth.Render(MusicRate); musicReady = true; });
+            worker.IsBackground = true;
+            worker.Start();
 
             clips = new AudioClip[Enum.GetValues(typeof(Sfx)).Length];
             clips[(int)Sfx.Select] = Build("select", 0.04f, t => Tone(t, 1400) * Env(t, 0.04f, 0.002f));
@@ -73,12 +95,41 @@ namespace CraneBay.Game
             source.PlayOneShot(clips[(int)sfx], volume);
         }
 
+        void Update()
+        {
+            // La boucle est prête : on crée le clip (obligatoirement sur le thread principal).
+            if (musicReady && musicSource.clip == null)
+            {
+                var clip = AudioClip.Create("musique", musicData.Length, 1, MusicRate, false);
+                clip.SetData(musicData, 0);
+                musicData = null;
+                musicSource.clip = clip;
+                ApplyMusic();
+            }
+        }
+
+        void ApplyMusic()
+        {
+            if (musicSource.clip == null) return;
+            bool play = MusicOn && !Muted;
+            if (play && !musicSource.isPlaying) musicSource.Play();
+            else if (!play && musicSource.isPlaying) musicSource.Pause();
+        }
+
+        /// <summary>Fait défiler : sons + musique -> sons seuls -> muet -> sons + musique.</summary>
         public void ToggleMute()
         {
-            Muted = !Muted;
+            if (!Muted && MusicOn) MusicOn = false;
+            else if (!Muted) Muted = true;
+            else { Muted = false; MusicOn = true; }
             PlayerPrefs.SetInt(MuteKey, Muted ? 1 : 0);
+            PlayerPrefs.SetInt(MusicKey, MusicOn ? 1 : 0);
             PlayerPrefs.Save();
+            ApplyMusic();
         }
+
+        /// <summary>Texte du bouton Son selon le réglage.</summary>
+        public string ModeLabel => Muted ? "Muet" : MusicOn ? "Son +\nmusique" : "Sons\nseuls";
 
         // --- Synthèse -------------------------------------------------------------
 
