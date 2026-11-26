@@ -330,27 +330,30 @@ static class Program
     static void Music()
     {
         const int rate = 22050;
-        var a = MusicSynth.Render(rate);
-        var b = MusicSynth.Render(rate);
-        Check(a.Length == MusicSynth.SampleCount(rate) && a.Length > rate * 15, "durée de la boucle");
-        bool same = true, finite = true;
-        float max = 0f, sumSq = 0f;
-        for (int i = 0; i < a.Length; i++)
+        foreach (MusicStyle style in Enum.GetValues(typeof(MusicStyle)))
         {
-            if (a[i] != b[i]) same = false;
-            if (float.IsNaN(a[i]) || float.IsInfinity(a[i])) finite = false;
-            max = Math.Max(max, Math.Abs(a[i]));
-            sumSq += a[i] * a[i];
+            string n = MusicSynth.StyleNames[(int)style];
+            var a = MusicSynth.Render(rate, style);
+            var b = MusicSynth.Render(rate, style);
+            Check(a.Length == MusicSynth.SampleCount(rate, style) && a.Length > rate * 12, n + " : durée de la boucle");
+            bool same = true, finite = true;
+            float max = 0f, sumSq = 0f;
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) same = false;
+                if (float.IsNaN(a[i]) || float.IsInfinity(a[i])) finite = false;
+                max = Math.Max(max, Math.Abs(a[i]));
+                sumSq += a[i] * a[i];
+            }
+            Check(same, n + " : identique à chaque lancement");
+            Check(finite && max <= 0.81f && max > 0.5f, n + " : niveau maîtrisé, pas de saturation");
+            Check(Math.Sqrt(sumSq / a.Length) > 0.05, n + " : pas silencieuse");
+            // Raccord de boucle : le saut entre la fin et le début reste de l'ordre d'un pas normal.
+            float jump = Math.Abs(a[0] - a[a.Length - 1]);
+            float typical = 0f;
+            for (int i = 1; i < a.Length; i++) typical = Math.Max(typical, Math.Abs(a[i] - a[i - 1]));
+            Check(jump <= typical, n + " : raccord de boucle sans claquement");
         }
-        Check(same, "musique identique à chaque lancement");
-        Check(finite && max <= 0.81f && max > 0.5f, "niveau maîtrisé, pas de saturation");
-        float rms = (float)Math.Sqrt(sumSq / a.Length);
-        Check(rms > 0.05f, "la musique n'est pas silencieuse");
-        // Raccord de boucle : le saut entre la fin et le début reste de l'ordre d'un pas normal.
-        float jump = Math.Abs(a[0] - a[a.Length - 1]);
-        float typical = 0f;
-        for (int i = 1; i < a.Length; i++) typical = Math.Max(typical, Math.Abs(a[i] - a[i - 1]));
-        Check(jump <= typical, "raccord de boucle sans claquement");
     }
 
     static Location Y(int slot) => new Location(LocationKind.Yard, slot);
