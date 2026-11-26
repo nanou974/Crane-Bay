@@ -77,11 +77,24 @@ namespace CraneBay.Core
 
         public static bool IsMaxed(int level) => level >= UpgradeMaxLevel;
 
-        /// <summary>Coût pour passer du niveau "level" au niveau suivant (croissance géométrique).</summary>
-        public static int UpgradeCost(UpgradeType type, int level)
+        /// <summary>
+        /// Les prix augmentent aussi avec le niveau du joueur (+12 % par niveau,
+        /// composé) : les gains grandissent avec les niveaux, les prix suivent.
+        /// </summary>
+        public const double PlayerLevelCostGrowth = 1.12;
+
+        public static double PlayerLevelCostFactor(int playerLevel) =>
+            Math.Pow(PlayerLevelCostGrowth, Math.Max(0, playerLevel - 1));
+
+        /// <summary>
+        /// Coût pour passer une amélioration du niveau "level" au suivant :
+        /// croissance géométrique selon le niveau de l'amélioration, multipliée
+        /// par le facteur lié au niveau du joueur.
+        /// </summary>
+        public static int UpgradeCost(UpgradeType type, int level, int playerLevel = 1)
         {
             int i = (int)type;
-            double cost = UpgradeBaseCost[i] * Math.Pow(UpgradeCostGrowth[i], level);
+            double cost = UpgradeBaseCost[i] * Math.Pow(UpgradeCostGrowth[i], level) * PlayerLevelCostFactor(playerLevel);
             // Arrondi "propre" à 5 $ près pour l'affichage.
             return (int)(Math.Round(cost / 5.0) * 5.0);
         }

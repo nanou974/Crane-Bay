@@ -25,8 +25,10 @@ enfoui, il faut d'abord déplacer ceux qui sont au-dessus. Un véhicule qui atte
 patience) repart à vide.
 
 **Niveaux :** chaque conteneur livré rapporte des XP (1 à 12 selon la couleur, +50 % en train). Quand la
-barre d'XP est pleine, on passe au niveau suivant (30 niveaux, seuil croissant) :
+barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis à chaque niveau) :
 - prime en argent (50 $ × le nouveau niveau) ;
+- **les améliorations coûtent plus cher** : +12 % par niveau de joueur (composé), en plus de la hausse
+  propre à chaque niveau d'amélioration ;
 - **le terminal se réinitialise** : parc et navire vidés, véhicules renvoyés, un nouveau navire arrive.
   L'argent, les améliorations et les coffres sont conservés ;
 - de nouvelles couleurs apparaissent : vert au niveau 2, rouge au niveau 4, doré au niveau 6. Au niveau 1,

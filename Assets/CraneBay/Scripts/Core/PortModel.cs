@@ -509,7 +509,7 @@ namespace CraneBay.Core
             return gained;
         }
 
-        public int NextUpgradeCost(UpgradeType t) => GameRules.UpgradeCost(t, Level(t));
+        public int NextUpgradeCost(UpgradeType t) => GameRules.UpgradeCost(t, Level(t), Data.level);
 
         public bool CanBuy(UpgradeType t) =>
             !GameRules.IsMaxed(Level(t)) && Data.money >= NextUpgradeCost(t);

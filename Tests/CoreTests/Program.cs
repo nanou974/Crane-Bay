@@ -70,6 +70,13 @@ static class Program
         foreach (UpgradeType t in Enum.GetValues(typeof(UpgradeType)))
             for (int l = 0; l < GameRules.UpgradeMaxLevel - 1; l++)
                 Check(GameRules.UpgradeCost(t, l + 1) > GameRules.UpgradeCost(t, l), $"coût croissant {t} {l}");
+        foreach (UpgradeType t in Enum.GetValues(typeof(UpgradeType)))
+            for (int pl = 1; pl < LevelRules.MaxLevel; pl++)
+                Check(GameRules.UpgradeCost(t, 0, pl + 1) > GameRules.UpgradeCost(t, 0, pl), $"prix croissant avec le niveau joueur {t} {pl}");
+        var mm = new PortModel(null, 1_700_000_000);
+        int c1 = mm.NextUpgradeCost(UpgradeType.VitesseGrue);
+        mm.AddXp(LevelRules.XpToNext(1));
+        Check(mm.NextUpgradeCost(UpgradeType.VitesseGrue) > c1, "le passage de niveau renchérit les améliorations");
         Check(GameRules.ShipInterval(5) < GameRules.ShipInterval(0), "attente navires réduite");
         Check(GameRules.VehicleInterval(5) < GameRules.VehicleInterval(0), "attente véhicules réduite");
         Check(GameRules.CraneSpeedMultiplier(5) > 1.9f, "grue plus rapide");
