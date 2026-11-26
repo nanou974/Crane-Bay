@@ -1,8 +1,9 @@
 // -----------------------------------------------------------------------------
 // Crane Bay - Interface (uGUI construite par code).
 // Épurée et toujours visible :
-//  - en haut : argent, niveau + barre d'XP, navire / météo, turbo, deux coffres ;
-//  - bandeau "À venir" : les 3 prochains véhicules et leurs couleurs, boutons
+//  - en haut : gros compteur d'argent à gauche, au centre le niveau avec une
+//    large barre d'XP, navire / météo et turbo, à droite les deux coffres ;
+//  - bandeau "À venir" : les 3 prochains véhicules (centrés) et leurs couleurs, boutons
 //    Contrats & records et Son ;
 //  - en bas : les cinq améliorations (niveau, effet, coût) ;
 //  - fenêtre Contrats du jour & Records, bannière de passage de niveau,
@@ -115,25 +116,42 @@ namespace CraneBay.Game
             bar.anchoredPosition = Vector2.zero;
             AddImage(bar.gameObject, SpriteFactory.UiRounded, Palette.UiPanel);
 
-            moneyText = AddText(bar, "Argent", "0 $", 72, Palette.UiGold, TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(36, -12), new Vector2(560, 88));
-            BuildXpRow(bar);
-            infoText = AddText(bar, "Infos", "", 28, Palette.UiText, TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(40, -152), new Vector2(600, 40));
-            turboText = AddText(bar, "Turbo", "", 28, new Color(1f, 0.55f, 0.2f), TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(40, -194), new Vector2(600, 40));
+            // Gauche : le compteur d'argent, en très gros (rétréci si le montant est long).
+            moneyText = AddText(bar, "Argent", "0 $", 100, Palette.UiGold, TextAnchor.MiddleLeft,
+                new Vector2(0, 0.5f), new Vector2(28, 0), new Vector2(MoneyWidth, 190));
+            moneyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            moneyText.resizeTextForBestFit = true;
+            moneyText.resizeTextMinSize = 40;
+            moneyText.resizeTextMaxSize = 100;
 
-            chests[(int)ChestKind.Quotidien] = BuildChest(bar, "Coffre du jour", new Vector2(-244, -20), ChestKind.Quotidien);
-            chests[(int)ChestKind.VingtMinutes] = BuildChest(bar, "Coffre 20 min", new Vector2(-20, -20), ChestKind.VingtMinutes);
+            // Milieu : niveau + large barre d'XP, puis navire / météo et turbo.
+            BuildXpRow(bar);
+            infoText = AddText(bar, "Infos", "", 34, Palette.UiText, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1), new Vector2(CenterOffset, -110), new Vector2(CenterWidth, 50), true);
+            turboText = AddText(bar, "Turbo", "", 28, new Color(1f, 0.55f, 0.2f), TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1), new Vector2(CenterOffset, -170), new Vector2(CenterWidth, 44), true);
+
+            // Droite : les deux coffres.
+            chests[(int)ChestKind.Quotidien] = BuildChest(bar, "Coffre\ndu jour", new Vector2(-20 - ChestWidth - 12, -20), ChestKind.Quotidien);
+            chests[(int)ChestKind.VingtMinutes] = BuildChest(bar, "Coffre\n20 min", new Vector2(-20, -20), ChestKind.VingtMinutes);
         }
 
-        /// <summary>Ligne "Niv. 3  [barre d'XP]  45 / 120 XP".</summary>
+        // Disposition de la barre du haut (largeur de référence 1080) :
+        // argent à gauche, bloc niveau/XP au centre, coffres à droite.
+        const float MoneyWidth = 290f;
+        const float ChestWidth = 150f;
+        const float CenterWidth = 420f;
+        // Le bloc central est décalé à droite du centre de l'écran, entre l'argent et les coffres.
+        const float CenterOffset = (MoneyWidth + 28f - 2f * ChestWidth - 52f) * 0.5f;
+
+        /// <summary>Ligne "Niv. 3  [large barre d'XP avec 45 / 120 XP dedans]", au centre.</summary>
         void BuildXpRow(RectTransform bar)
         {
-            levelText = AddText(bar, "Niveau", "Niv. 1", 34, Palette.UiText, TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(40, -104), new Vector2(150, 44));
+            float left = CenterOffset - CenterWidth * 0.5f;
+            levelText = AddText(bar, "Niveau", "Niv. 1", 40, Palette.UiText, TextAnchor.MiddleLeft,
+                new Vector2(0.5f, 1), new Vector2(left + 60f, -46), new Vector2(120, 56), true);
             var back = NewRect("BarreXP", bar);
-            SetRect(back, new Vector2(0, 1), new Vector2(190, -112), new Vector2(240, 28));
+            SetRect(back, new Vector2(0.5f, 1), new Vector2(left + 125f + (CenterWidth - 125f) * 0.5f, -52), new Vector2(CenterWidth - 125f, 44), true);
             AddImage(back.gameObject, SpriteFactory.UiRounded, new Color(0.05f, 0.06f, 0.1f, 1f)).raycastTarget = false;
             xpFill = NewRect("Remplissage", back);
             xpFill.anchorMin = Vector2.zero;
@@ -141,14 +159,15 @@ namespace CraneBay.Game
             xpFill.offsetMin = new Vector2(3, 3);
             xpFill.offsetMax = new Vector2(-3, -3);
             AddImage(xpFill.gameObject, SpriteFactory.UiRounded, new Color(0.35f, 0.75f, 1f)).raycastTarget = false;
-            xpText = AddText(bar, "XP", "", 26, new Color(1, 1, 1, 0.85f), TextAnchor.MiddleLeft,
-                new Vector2(0, 1), new Vector2(440, -104), new Vector2(170, 44));
+            // Texte "77 / 98 XP" posé sur la barre.
+            xpText = AddText(back, "XP", "", 26, Color.white, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(CenterWidth - 125f, 44), true);
         }
 
         ChestUi BuildChest(RectTransform bar, string title, Vector2 pos, ChestKind kind)
         {
             var ui = new ChestUi();
-            ui.button = MakeButton(bar, title, new Vector2(1, 1), pos, new Vector2(212, 170), Palette.UiButton, out ui.image);
+            ui.button = MakeButton(bar, title, new Vector2(1, 1), pos, new Vector2(ChestWidth, 200), Palette.UiButton, out ui.image);
             var rt = (RectTransform)ui.button.transform;
             // Petit coffre dessiné avec deux rectangles (couvercle + serrure).
             var box = NewRect("Icone", rt);
@@ -158,10 +177,10 @@ namespace CraneBay.Game
             SetRect(band, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(16, 44), true);
             AddImage(band.gameObject, SpriteFactory.UiRounded, Palette.UiGold).raycastTarget = false;
 
-            ui.title = AddText(rt, "Titre", title, 26, Palette.UiText, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 1), new Vector2(0, -66), new Vector2(206, 40), true);
-            ui.timer = AddText(rt, "Timer", "", 34, Palette.UiText, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 1), new Vector2(0, -110), new Vector2(206, 48), true);
+            ui.title = AddText(rt, "Titre", title, 24, Palette.UiText, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1), new Vector2(0, -64), new Vector2(ChestWidth - 6, 64), true);
+            ui.timer = AddText(rt, "Timer", "", 32, Palette.UiText, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1), new Vector2(0, -140), new Vector2(ChestWidth - 6, 48), true);
             ui.button.onClick.AddListener(() => game.OpenChest(kind));
             return ui;
         }
@@ -181,16 +200,17 @@ namespace CraneBay.Game
             for (int i = 0; i < GameRules.UpcomingCount; i++)
             {
                 var g = NewRect("Vehicule" + i, strip);
-                SetRect(g, new Vector2(0, 0.5f), new Vector2(130 + i * 210, 0), new Vector2(200, 70));
+                // Les véhicules à venir sont centrés sous le bloc niveau / XP.
+                SetRect(g, new Vector2(0.5f, 0.5f), new Vector2(CenterOffset + (i - 1) * 160, 0), new Vector2(150, 70), true);
                 var ui = new UpcomingUi
                 {
-                    label = AddText(g, "Type", "", 22, Palette.UiText, TextAnchor.MiddleLeft, new Vector2(0, 1), new Vector2(0, 0), new Vector2(200, 30)),
+                    label = AddText(g, "Type", "", 22, Palette.UiText, TextAnchor.MiddleCenter, new Vector2(0.5f, 1), new Vector2(0, 0), new Vector2(150, 30), true),
                     squares = new Image[GameRules.TrainWagons],
                 };
                 for (int k = 0; k < ui.squares.Length; k++)
                 {
                     var sq = NewRect("Couleur" + k, g);
-                    SetRect(sq, new Vector2(0, 0), new Vector2(k * 60, 4), new Vector2(54, 30));
+                    SetRect(sq, new Vector2(0.5f, 0), new Vector2((k - 1) * 48, 4), new Vector2(42, 28), true);
                     ui.squares[k] = AddImage(sq.gameObject, SpriteFactory.UiRounded, Color.white);
                     ui.squares[k].raycastTarget = false;
                 }
@@ -443,7 +463,12 @@ namespace CraneBay.Game
                 {
                     bool show = has && k < m.upcoming[i].colors.Count;
                     ui.squares[k].enabled = show;
-                    if (show) ui.squares[k].color = Palette.Of(m.upcoming[i].colors[k]);
+                    if (!show) continue;
+                    ui.squares[k].color = Palette.Of(m.upcoming[i].colors[k]);
+                    // Carrés centrés sous le nom du véhicule (1 pour un camion, 3 pour un train).
+                    int count = m.upcoming[i].colors.Count;
+                    var rt = ui.squares[k].rectTransform;
+                    rt.anchoredPosition = new Vector2((k - (count - 1) * 0.5f) * 48f, rt.anchoredPosition.y);
                 }
             }
 
