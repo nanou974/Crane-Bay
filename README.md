@@ -70,7 +70,7 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
 - Le jeu enregistre l'heure UTC de la dernière ouverture, pas un compte à rebours : le timer reste exact
   après une fermeture ou un redémarrage du téléphone.
 
-**Musique :** une boucle d'ambiance chill (piano électrique, basse, batterie légère, marimba) est
+**Musique :** une boucle d'ambiance tropicale (ukulélé, steel drum, basse, shaker) est
 générée par code au lancement (`Core/MusicSynth.cs`) : pas de fichier audio, donc aucun problème de droits.
 Le bouton « Son » fait défiler : sons + musique, sons seuls, muet.
 
@@ -147,7 +147,7 @@ Assets/CraneBay/Scripts/
 │   ├── PortModel.cs     Règles du terminal : navires, véhicules, demandes, paiement, coffres
 │   ├── LevelRules.cs    Niveaux : XP, seuils, primes, déblocages, thèmes, tirage des conteneurs
 │   ├── Contracts.cs     Contrats du jour
-│   ├── MusicSynth.cs    Musique d'ambiance synthétisée (boucle de 22 s)
+│   ├── MusicSynth.cs    Musique d'ambiance synthétisée (4 styles, tropical par défaut)
 │   ├── Ambience.cs      Cycle jour/nuit et météo (déterministes, basés sur l'heure)
 │   ├── ChestLogic.cs    Timers de coffres basés sur l'horloge UTC, récompenses
 │   ├── SaveData.cs      Données sauvegardées + réparation des sauvegardes anciennes

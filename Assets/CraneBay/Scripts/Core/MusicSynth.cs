@@ -30,7 +30,7 @@ namespace CraneBay.Core
         const float Peak = 0.8f; // niveau maximal après normalisation
 
         /// <summary>Style joué dans le jeu.</summary>
-        public const MusicStyle DefaultStyle = MusicStyle.Chill;
+        public const MusicStyle DefaultStyle = MusicStyle.Tropical;
 
         public static readonly string[] StyleNames = { "Chill", "Tropical", "Bossa", "Rétro 8-bit" };
 
