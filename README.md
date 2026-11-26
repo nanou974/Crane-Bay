@@ -12,13 +12,15 @@ Gratuit, sans publicité ni achat intégré, distribué en APK hors store.
 
 1. Un **porte-conteneurs** arrive à quai (en haut de l'écran) avec 6 à 12 conteneurs.
 2. Le joueur commande le **portique** pour déposer chaque conteneur dans le **parc** (5 × 4 emplacements,
-   3 conteneurs maximum par pile).
+   3 conteneurs par pile au départ, 4 avec l'agrandissement).
 3. **Camions** (2 places sur la route) et **trains** (3 wagons) arrivent et demandent une couleur précise,
    affichée en silhouette sur la remorque ou le wagon, avec sa valeur.
 4. Chaque conteneur livré rapporte de l'argent : blanc 10 $, bleu 25 $, vert 50 $, rouge 100 $, doré 250 $
    (+50 % en train).
-5. L'argent achète des améliorations à 10 niveaux, au coût croissant : **vitesse de la grue**, **attente
-   entre deux navires**, **attente entre deux camions/trains**.
+5. L'argent achète des améliorations au coût croissant : **vitesse de la grue**, **attente entre deux
+   navires**, **attente entre deux camions/trains** (10 niveaux chacune), **agrandir le parc** (2 niveaux :
+   une 4e rangée, puis des piles de 4) et une **2e grue** (elle dessert le parc, les camions et les trains,
+   mais pas le navire).
 
 **Le casse-tête :** la grue ne peut saisir que le conteneur du dessus d'une pile. Pour sortir un conteneur
 enfoui, il faut d'abord déplacer ceux qui sont au-dessus. Un véhicule qui attend trop longtemps (jauge de
@@ -36,6 +38,29 @@ barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis
 - les navires arrivent plus chargés : +1 conteneur tous les 3 niveaux.
 
 Les règles sont dans `Core/LevelRules.cs`.
+
+**Feu d'artifice :** chaque passage de niveau déclenche un feu d'artifice (fusées, gerbes d'étincelles,
+sifflements et détonations), une fanfare et une bannière qui annonce la prime et les nouveautés.
+
+**Conteneurs spéciaux :**
+- *20 pieds* (dès le niveau 2) : deux fois plus courts, ils valent 60 % d'un 40 pieds. Un 40 pieds ne peut
+  pas être posé sur un 20 pieds.
+- *Frigorifiques* (dès le niveau 3, symbole bleu) : +50 % de valeur, mais ils doivent être branchés sur la
+  rangée électrifiée du parc (la plus proche du quai, prises jaunes). Débranchés, ils perdent de la valeur
+  en 90 s (jusqu'à 30 %).
+- *Dangereux* (dès le niveau 5, losange orange) : +40 % de valeur, mais jamais deux dans la même pile ni dans
+  deux piles voisines.
+
+**Autres mécaniques :**
+- *Commandes à venir* : le bandeau « À venir » montre les 3 prochains véhicules et leurs couleurs.
+- *Bonus rapidité* : +20 % si le conteneur est livré dans les 10 s après l'arrivée du véhicule.
+- *Contrats du jour* : 3 objectifs renouvelés chaque jour (ex. « livrer 5 rouges en train »), avec prime
+  en argent et en XP.
+- *Météo et jour/nuit* : un cycle jour/nuit de 10 min (lampadaires la nuit). Le vent ralentit la grue de
+  15 %, la pluie de 5 %.
+- *Ports à thème* : port tempéré, puis tropical au niveau 10 et polaire au niveau 20 (eau, quai, végétation).
+- *Statistiques et records* : bouton « Contrats & records » (livraisons, navires, trains, meilleur train,
+  déchargement le plus rapide, meilleure livraison).
 
 **Coffres :**
 - *Coffre du jour* : toutes les 24 h, de l'argent et parfois un turbo de grue (x2 pendant 5 min).
@@ -113,7 +138,9 @@ Assets/CraneBay/Scripts/
 │   ├── GameRules.cs     Équilibrage : valeurs, améliorations, timers, tailles du parc
 │   ├── StackGrid.cs     Piles de conteneurs : on ne prend que le dessus, hauteur max
 │   ├── PortModel.cs     Règles du terminal : navires, véhicules, demandes, paiement, coffres
-│   ├── LevelRules.cs    Niveaux : XP par couleur, seuils, primes, couleurs débloquées
+│   ├── LevelRules.cs    Niveaux : XP, seuils, primes, déblocages, thèmes, tirage des conteneurs
+│   ├── Contracts.cs     Contrats du jour
+│   ├── Ambience.cs      Cycle jour/nuit et météo (déterministes, basés sur l'heure)
 │   ├── ChestLogic.cs    Timers de coffres basés sur l'horloge UTC, récompenses
 │   ├── SaveData.cs      Données sauvegardées + réparation des sauvegardes anciennes
 │   └── ContainerTypes.cs
@@ -123,6 +150,8 @@ Assets/CraneBay/Scripts/
 │   ├── InputController.cs  Tap-tap et glisser-déposer
 │   ├── Hud.cs           Interface uGUI construite par code (safe area gérée)
 │   ├── ShipView.cs, VehicleView.cs, ContainerView.cs, WorldBuilder.cs
+│   ├── AmbienceView.cs  Voile de nuit, halos des lampadaires, vent, pluie
+│   ├── Fireworks.cs     Feu d'artifice du passage de niveau (sprites recyclés)
 │   ├── SpriteFactory.cs Sprites générés dans un atlas unique (contours nets, ombres douces)
 │   ├── AudioManager.cs  Bruitages synthétisés (pas de fichiers audio)
 │   ├── SaveSystem.cs    JSON local, écriture atomique
@@ -177,5 +206,8 @@ Ces tests tournent aussi automatiquement sur GitHub (Actions) à chaque push.
 ## Limites connues du prototype
 
 - Graphismes et sons procéduraux (placeholders lisibles), à remplacer par de vrais assets.
-- Un seul portique, un seul poste à quai, un seul gabarit de conteneur (40 pieds stylisé).
+- Un seul poste à quai. Un 20 pieds occupe une place entière du parc (pas deux 20 pieds côte à côte sur un
+  emplacement de 40) : règle simplifiée.
+- Rien n'a encore été testé dans Unity : la logique est couverte par les tests .NET et le code Unity
+  compile contre les DLL de référence, mais l'équilibrage et le rendu restent à vérifier en jeu.
 - Pas de menu titre ni de réglages en dehors du bouton son.

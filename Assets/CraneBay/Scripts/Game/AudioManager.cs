@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace CraneBay.Game
 {
-    public enum Sfx { Select, Grab, Drop, Coin, Chest, Error, Horn, Honk, Upgrade }
+    public enum Sfx { Select, Grab, Drop, Coin, Chest, Error, Horn, Honk, Upgrade, Whistle, Pop, Fanfare }
 
     public class AudioManager : MonoBehaviour
     {
@@ -46,6 +46,19 @@ namespace CraneBay.Game
             clips[(int)Sfx.Honk] = Build("honk", 0.28f, t =>
                 (Square(t, 392) * 0.25f + Square(t, 494) * 0.2f) * Mathf.Clamp01(t * 40f) * Mathf.Clamp01((0.28f - t) * 20f));
             clips[(int)Sfx.Upgrade] = Build("upgrade", 0.35f, t => Tone(t, 400 + 1400 * t) * Env(t, 0.35f, 0.01f));
+            // Feu d'artifice : sifflement montant, puis détonation sourde + crépitement.
+            clips[(int)Sfx.Whistle] = Build("whistle", 0.8f, t => Tone(t, 900 + 1500 * t) * 0.25f * Mathf.Clamp01(t * 10f) * Mathf.Clamp01((0.8f - t) * 5f));
+            clips[(int)Sfx.Pop] = Build("pop", 0.9f, t =>
+                (Noise() * Mathf.Exp(-9f * t) + Tone(t, 70) * Mathf.Exp(-12f * t) * 0.8f
+                 + (Noise() > 0.92f ? Noise() * 0.5f : 0f) * Mathf.Clamp01(t * 6f) * Mathf.Exp(-3f * t)));
+            // Fanfare de passage de niveau (do-mi-sol-do aigu, tenu).
+            clips[(int)Sfx.Fanfare] = Build("fanfare", 1.2f, t =>
+            {
+                float[] notes = { 523, 659, 784, 1047 };
+                int i = Mathf.Min(3, (int)(t / 0.14f));
+                float env = i < 3 ? Env(t - i * 0.14f, 0.3f, 0.005f) : Mathf.Exp(-2.5f * (t - 0.42f));
+                return (Square(t, notes[i]) * 0.18f + Tone(t, notes[i]) * 0.5f + Tone(t, notes[i] * 1.5f) * 0.15f) * env;
+            });
         }
 
         public void Play(Sfx sfx, float volume = 1f)

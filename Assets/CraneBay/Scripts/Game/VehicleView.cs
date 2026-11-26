@@ -22,6 +22,7 @@ namespace CraneBay.Game
         Transform patienceFill;
         SpriteRenderer patienceFillSr;
         GameObject patienceRoot;
+        TextMesh fastLabel;
 
         float dockX, startX, exitX;
         float timer;
@@ -124,6 +125,8 @@ namespace CraneBay.Game
             SpriteFactory.Make("Fond", patienceRoot.transform, SpriteFactory.RoundedSmall, Palette.Outline, new Vector2(PatienceWidth + 0.08f, 0.16f), Vector3.zero, 8);
             patienceFillSr = SpriteFactory.Make("Jauge", patienceRoot.transform, SpriteFactory.Plain, Palette.UiGreen, new Vector2(PatienceWidth, 0.08f), Vector3.zero, 9);
             patienceFill = patienceFillSr.transform;
+            // Bonus de rapidité : affiché tant que le véhicule vient d'arriver.
+            fastLabel = SpriteFactory.MakeText("Rapide", patienceRoot.transform, "RAPIDE +20 %", 0.22f, Palette.UiGold, new Vector3(0f, 0.2f, 0f), 9);
             patienceRoot.SetActive(false);
         }
 
@@ -194,6 +197,19 @@ namespace CraneBay.Game
             var p = transform.position;
             p.x = x;
             transform.position = p;
+        }
+
+        /// <summary>Affiche ou masque l'étiquette du bonus de rapidité (clignote légèrement).</summary>
+        public void SetFast(bool active)
+        {
+            if (fastLabel == null) return;
+            if (fastLabel.gameObject.activeSelf != active) fastLabel.gameObject.SetActive(active);
+            if (active)
+            {
+                var c = Palette.UiGold;
+                c.a = 0.65f + 0.35f * Mathf.Sin(Time.time * 10f);
+                fastLabel.color = c;
+            }
         }
 
         /// <summary>Met à jour la jauge de patience (vert -> orange -> rouge).</summary>

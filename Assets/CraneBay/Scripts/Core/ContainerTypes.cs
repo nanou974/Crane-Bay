@@ -22,25 +22,40 @@ namespace CraneBay.Core
     }
 
     /// <summary>
-    /// Un conteneur logique : un identifiant unique (pour retrouver sa
-    /// représentation visuelle) et une couleur. Classe sérialisable par
-    /// JsonUtility (champs publics, pas de propriétés).
+    /// Un conteneur logique. Classe sérialisable par JsonUtility (champs
+    /// publics uniquement).
+    ///  - size : 40 (grand, standard) ou 20 pieds (petit, vaut moins cher).
+    ///    Règle d'empilage réelle : un 40 pieds ne se pose que sur le sol ou
+    ///    sur un autre 40 pieds (jamais sur un 20 pieds).
+    ///  - reefer : conteneur frigorifique. Hors d'un emplacement électrifié,
+    ///    sa marchandise se dégrade et sa valeur baisse.
+    ///  - hazard : matières dangereuses. Interdit à côté (ou sur/sous) un autre
+    ///    conteneur dangereux.
     /// </summary>
     [Serializable]
     public class ContainerInfo
     {
         public int id;
         public int color;
+        public int size = 40;
+        public bool reefer;
+        public bool hazard;
+        public float unplugged; // secondes passées débranché (frigorifiques)
 
         public ContainerInfo() { }
 
-        public ContainerInfo(int id, ContainerColor color)
+        public ContainerInfo(int id, ContainerColor color, int size = 40, bool reefer = false, bool hazard = false)
         {
             this.id = id;
             this.color = (int)color;
+            this.size = size == 20 ? 20 : 40;
+            this.reefer = reefer;
+            this.hazard = hazard;
         }
 
         /// <summary>Couleur typée (la sauvegarde garde un int).</summary>
         public ContainerColor Color => (ContainerColor)color;
+
+        public bool IsSmall => size == 20;
     }
 }

@@ -7,13 +7,14 @@
 // Sans dépendance Unity (testable hors moteur).
 // -----------------------------------------------------------------------------
 using System;
+using System.Collections.Generic;
 
 namespace CraneBay.Core
 {
     [Serializable]
     public class SaveData
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
 
         public int version = CurrentVersion;
 
@@ -21,7 +22,7 @@ namespace CraneBay.Core
         public long money;
         public long totalEarned;
         public int delivered;                 // nombre de conteneurs livrés (statistique)
-        public int[] upgrades = new int[3];   // index = UpgradeType
+        public int[] upgrades = new int[GameRules.UpgradeCount]; // index = UpgradeType
 
         // --- Niveau du joueur ---
         public int level = 1;
@@ -38,6 +39,19 @@ namespace CraneBay.Core
         public double lastDailyChestUnix;     // 0 = jamais ouvert (donc prêt)
         public double lastQuickChestUnix;
         public double turboEndUnix;           // fin du turbo de grue
+
+        // --- Contrats du jour ---
+        public long contractsDay = -1;        // jour (UTC) des contrats en cours
+        public List<Contract> contracts = new List<Contract>();
+
+        // --- Statistiques et records ---
+        public double shipDockedSinceUnix;    // arrivée du navire en cours (record de déchargement)
+        public int shipsUnloaded;
+        public int trainsCompleted;
+        public int fastDeliveries;
+        public int bestTrainEarned;
+        public double bestUnloadSeconds;      // 0 = pas encore de record
+        public int bestSingleDelivery;
 
         public static SaveData NewGame(double nowUnix)
         {
@@ -56,15 +70,17 @@ namespace CraneBay.Core
         /// </summary>
         public void Sanitize(double nowUnix)
         {
-            if (upgrades == null || upgrades.Length != 3)
+            int n = GameRules.UpgradeCount;
+            if (upgrades == null || upgrades.Length != n)
             {
-                var fixedUp = new int[3];
+                var fixedUp = new int[n];
                 if (upgrades != null)
-                    for (int i = 0; i < Math.Min(3, upgrades.Length); i++) fixedUp[i] = upgrades[i];
+                    for (int i = 0; i < Math.Min(n, upgrades.Length); i++) fixedUp[i] = upgrades[i];
                 upgrades = fixedUp;
             }
-            for (int i = 0; i < 3; i++)
-                upgrades[i] = Math.Max(0, Math.Min(GameRules.UpgradeMaxLevel, upgrades[i]));
+            for (int i = 0; i < n; i++)
+                upgrades[i] = Math.Max(0, Math.Min(GameRules.MaxLevelOf((UpgradeType)i), upgrades[i]));
+            if (contracts == null) contracts = new List<Contract>();
 
             if (money < 0) money = 0;
             if (level < 1) level = 1;
@@ -99,6 +115,14 @@ namespace CraneBay.Core
         {
             var g = new StackGrid(c, r, h);
             if (old == null || old.stacks == null) return g;
+            // Même disposition au sol (ancienne version moins haute) : on garde chaque pile à sa place.
+            if (old.columns == c && old.rows == r && old.stacks.Count == c * r)
+            {
+                for (int i = 0; i < old.stacks.Count; i++)
+                    if (old.stacks[i]?.items != null)
+                        foreach (var item in old.stacks[i].items) g.Place(i, item);
+                return g;
+            }
             int slot = 0;
             foreach (var s in old.stacks)
             {

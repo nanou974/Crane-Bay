@@ -2,16 +2,18 @@
 // Crane Bay - Chef d'orchestre du jeu.
 //
 // Relie le modèle logique (PortModel, sans affichage) aux vues : décor,
-// navire, véhicules, grue, interface, sons, sauvegarde.
+// ambiance (nuit, météo), navire, véhicules, grues, interface, sons,
+// feu d'artifice, sauvegarde.
 // Toute la scène est construite par code au démarrage : la scène Unity ne
 // contient qu'un objet avec ce composant (et même sans lui, Bootstrap le crée).
 //
 // Boucle de jeu :
 //  1. un navire arrive et apporte une série de conteneurs ;
-//  2. le joueur déplace les conteneurs vers le parc avec la grue ;
-//  3. camions / trains arrivent et demandent une couleur précise ;
-//  4. chaque conteneur livré rapporte de l'argent selon sa couleur ;
-//  5. l'argent achète des améliorations (vitesse grue, attentes réduites).
+//  2. le joueur les range dans le parc avec la grue (règles d'empilage) ;
+//  3. camions / trains (annoncés à l'avance) demandent une couleur précise ;
+//  4. chaque conteneur livré rapporte argent et XP ; les contrats du jour
+//     donnent des primes ; un niveau franchi remet le terminal à zéro ;
+//  5. l'argent achète des améliorations (vitesse, attentes, parc, 2e grue).
 // -----------------------------------------------------------------------------
 using System.Collections.Generic;
 using CraneBay.Core;
@@ -27,26 +29,33 @@ namespace CraneBay.Game
 
         const float AutosaveInterval = 10f;
         const float HudRefreshInterval = 0.25f;
+        const float ReeferRefreshInterval = 0.5f;
 
         readonly System.Random rng = new System.Random();
         readonly Dictionary<int, ContainerView> containerViews = new Dictionary<int, ContainerView>();
         readonly Dictionary<Vehicle, VehicleView> vehicleViews = new Dictionary<Vehicle, VehicleView>();
         readonly List<SpriteRenderer> hintPool = new List<SpriteRenderer>();
+        readonly List<CraneController> cranes = new List<CraneController>();
+        readonly Dictionary<Location, CraneController> locks = new Dictionary<Location, CraneController>();
 
         Camera cam;
         Transform world, yardRoot, vehiclesRoot;
+        WorldBuilder decor;
         ShipView ship;
-        CraneController crane;
+        CraneController mainCrane;
         Hud hud;
         AudioManager audioManager;
         FloatingText floating;
+        Fireworks fireworks;
 
         Location selected = Location.None;
         SpriteRenderer selectRing;
         ContainerView dragGhost;
+        ContainerView releasingView; // conteneur en cours de dépose (protégé pendant une remise à zéro)
 
-        float autosaveTimer, hudTimer, saveSoonTimer = -1f;
+        float autosaveTimer, hudTimer, reeferTimer, contractTimer, saveSoonTimer = -1f;
         int lastScreenW, lastScreenH;
+        PortTheme appliedTheme = (PortTheme)(-1);
 
         public float CraneSpeedMultiplier => Model.CraneMultiplier(TimeUtil.NowUnix);
         public bool SoundMuted => audioManager.Muted;
@@ -67,12 +76,14 @@ namespace CraneBay.Game
 
             double now = TimeUtil.NowUnix;
             Model = new PortModel(SaveSystem.Load(), now);
+            Model.EnsureContracts(now, rng);
 
             SpriteFactory.Ensure();
             SetupCamera();
 
             world = new GameObject("Terminal").transform;
-            world.gameObject.AddComponent<WorldBuilder>().Build();
+            decor = world.gameObject.AddComponent<WorldBuilder>();
+            decor.Build();
             yardRoot = new GameObject("Parc").transform;
             yardRoot.SetParent(world, false);
             vehiclesRoot = new GameObject("Vehicules").transform;
@@ -81,14 +92,22 @@ namespace CraneBay.Game
             ship = ShipView.Create(world);
             ship.Arrived += () => Feedback(null, "Un navire est à quai : déchargez-le !");
 
-            crane = new GameObject("Grue").AddComponent<CraneController>();
-            crane.transform.SetParent(world, false);
-            crane.Init(this);
+            audioManager = gameObject.AddComponent<AudioManager>();
+
+            mainCrane = CreateCrane(true);
+            if (Model.HasSecondCrane) CreateCrane(false);
 
             floating = new GameObject("TextesFlottants").AddComponent<FloatingText>();
             floating.transform.SetParent(world, false);
 
-            audioManager = gameObject.AddComponent<AudioManager>();
+            var ambience = new GameObject("Ambiance").AddComponent<AmbienceView>();
+            ambience.transform.SetParent(world, false);
+            ambience.Build(decor.lampPositions);
+
+            fireworks = new GameObject("FeuDArtifice").AddComponent<Fireworks>();
+            fireworks.transform.SetParent(world, false);
+            fireworks.Init(audioManager);
+
             hud = new GameObject("HUD").AddComponent<Hud>();
             hud.transform.SetParent(transform, false);
             hud.Init(this);
@@ -106,6 +125,8 @@ namespace CraneBay.Game
             Model.VehicleLeaving += OnVehicleLeaving;
             Model.LevelUp += OnLevelUp;
             Model.TerminalReset += OnTerminalReset;
+            Model.ContractCompleted += c => Feedback(Sfx.Coin, "Contrat rempli : " + c.Describe() + "\n+" + Hud.FormatMoney(c.rewardMoney) + "  +" + c.rewardXp + " XP");
+            Model.RecordBroken += msg => Feedback(Sfx.Upgrade, msg);
 
             // État chargé : parc et, éventuellement, navire déjà à quai.
             RebuildYardViews();
@@ -114,8 +135,31 @@ namespace CraneBay.Game
                 BuildShipCargoViews();
                 ship.Arrive(true);
             }
-
+            ApplyProgressVisuals();
             hud.Refresh(now);
+        }
+
+        CraneController CreateCrane(bool main)
+        {
+            var c = new GameObject(main ? "Grue" : "Grue2").AddComponent<CraneController>();
+            c.transform.SetParent(world, false);
+            c.Init(this, main);
+            cranes.Add(c);
+            return c;
+        }
+
+        /// <summary>Décor qui dépend de la progression : thème du port, parc débloqué, rails de la 2e grue.</summary>
+        void ApplyProgressVisuals()
+        {
+            var theme = Model.Theme;
+            if (theme != appliedTheme)
+            {
+                appliedTheme = theme;
+                decor.ApplyTheme(theme);
+                cam.backgroundColor = Palette.Themes[(int)theme].clear;
+            }
+            decor.SetUnlockedRows(Model.YardRowsUnlocked);
+            decor.SetSecondCrane(Model.HasSecondCrane);
         }
 
         void SetupCamera()
@@ -152,11 +196,12 @@ namespace CraneBay.Game
         void Update()
         {
             double now = TimeUtil.NowUnix;
+            float dt = Time.deltaTime;
             if (Screen.width != lastScreenW || Screen.height != lastScreenH) FitCamera();
 
             // Navires : arrivée selon l'horloge réelle (fonctionne aussi après une fermeture).
             Model.UpdateShip(now, rng);
-            if (Model.ShipNeedsDeparture && ship.IsDocked && !crane.CarriedFromShip)
+            if (Model.ShipNeedsDeparture && ship.IsDocked && !mainCrane.CarriedFromShip)
             {
                 Model.DepartShip(now);
                 Feedback(Sfx.Horn, "Navire déchargé ! Prochain dans " + ChestLogic.Format(Model.SecondsUntilShip(now)));
@@ -166,25 +211,46 @@ namespace CraneBay.Game
             // Camions et trains.
             Model.UpdateVehicles(now, rng);
             foreach (var kv in vehicleViews)
+            {
                 kv.Value.SetPatience(PortModel.PatienceRatio(kv.Key, now));
+                kv.Value.SetFast(PortModel.FastBonusActive(kv.Key, now));
+            }
+
+            // Frigorifiques débranchés : la valeur affichée baisse.
+            Model.UpdateReefers(dt);
+            reeferTimer -= dt;
+            if (reeferTimer <= 0f)
+            {
+                reeferTimer = ReeferRefreshInterval;
+                foreach (var v in containerViews.Values) if (v != null && v.Info.reefer) v.RefreshValue();
+            }
+
+            // Contrats : renouvellement au changement de jour.
+            contractTimer -= dt;
+            if (contractTimer <= 0f)
+            {
+                contractTimer = 1f;
+                if (Model.EnsureContracts(now, rng)) Feedback(Sfx.Chest, "Nouveaux contrats du jour disponibles !");
+            }
 
             UpdateSelectionVisuals();
 
-            hudTimer -= Time.deltaTime;
+            hudTimer -= dt;
             if (hudTimer <= 0f) { hudTimer = HudRefreshInterval; hud.Refresh(now); }
 
-            autosaveTimer += Time.deltaTime;
+            autosaveTimer += dt;
             if (autosaveTimer >= AutosaveInterval) SaveNow();
             if (saveSoonTimer >= 0f)
             {
-                saveSoonTimer -= Time.deltaTime;
+                saveSoonTimer -= dt;
                 if (saveSoonTimer < 0f) SaveNow();
             }
 
             // Bouton "retour" Android : annule la sélection, sinon quitte proprement.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if (!selected.IsNone) ClearSelection();
+                if (hud.PanelOpen) hud.ClosePanel();
+                else if (!selected.IsNone) ClearSelection();
                 else { SaveNow(); Application.Quit(); }
             }
         }
@@ -238,6 +304,7 @@ namespace CraneBay.Game
             v.transform.SetParent(yardRoot, false);
             v.transform.localPosition = BoardLayout.YardSlotCenter(slot) + BoardLayout.TierOffset(tier);
             v.SetTier(tier);
+            v.RefreshValue();
         }
 
         // =====================================================================
@@ -279,53 +346,6 @@ namespace CraneBay.Game
             }
         }
 
-        // =====================================================================
-        // Niveaux du joueur
-        // =====================================================================
-
-        void OnLevelUp(LevelUpInfo info)
-        {
-            string msg = "NIVEAU " + info.newLevel + " !  +" + Hud.FormatMoney(info.reward);
-            if (info.unlockedColor >= 0)
-                msg += "\nNouveau : conteneurs " + GameRules.ColorNames[info.unlockedColor].ToLowerInvariant()
-                       + "s (" + GameRules.ColorValues[info.unlockedColor] + " $)";
-            else if (LevelRules.ExtraCargo(info.newLevel) > LevelRules.ExtraCargo(info.newLevel - 1))
-                msg += "\nLes navires arrivent plus chargés";
-            msg += "\nLe terminal repart à zéro !";
-            Feedback(Sfx.Chest, msg);
-            hud.Refresh(TimeUtil.NowUnix);
-            SaveSoon();
-        }
-
-        /// <summary>
-        /// Passage de niveau : le modèle a vidé le parc et le navire. On efface
-        /// les conteneurs affichés, on annule les ordres de la grue, le navire
-        /// et les véhicules s'en vont. Le conteneur qui vient d'être livré reste
-        /// sur son véhicule (il part avec lui).
-        /// </summary>
-        void OnTerminalReset()
-        {
-            crane.CancelPending();
-            ClearSelection();
-            if (dragGhost != null) { Destroy(dragGhost.gameObject); dragGhost = null; }
-
-            var onVehicles = new HashSet<int>();
-            foreach (var view in vehicleViews.Values)
-                foreach (var cv in view.Loaded) if (cv != null) onVehicles.Add(cv.Info.id);
-            var toRemove = new List<int>();
-            foreach (var kv in containerViews)
-            {
-                if (onVehicles.Contains(kv.Key)) continue;
-                if (kv.Value != null && kv.Value != crane.Carried) Destroy(kv.Value.gameObject);
-                toRemove.Add(kv.Key);
-            }
-            foreach (var id in toRemove) containerViews.Remove(id);
-
-            if (ship.Current == ShipView.State.Docked || ship.Current == ShipView.State.Arriving) ship.Leave();
-            foreach (var view in vehicleViews.Values) view.Leave(0.6f);
-            SaveSoon();
-        }
-
         bool TryGetVehicleView(Location loc, out VehicleView view, out int cargoIndex)
         {
             view = null; cargoIndex = 0;
@@ -336,19 +356,81 @@ namespace CraneBay.Game
         }
 
         // =====================================================================
-        // Services pour la grue
+        // Niveaux du joueur
         // =====================================================================
 
-        /// <summary>La grue peut-elle saisir à cet endroit maintenant ? (navire : seulement à quai)</summary>
+        void OnLevelUp(LevelUpInfo info)
+        {
+            string details = "+" + Hud.FormatMoney(info.reward);
+            if (!string.IsNullOrEmpty(info.unlocks)) details += "\nNouveau : " + info.unlocks;
+            details += "\nLe terminal repart à zéro !";
+            hud.ShowLevelBanner(info.newLevel, details);
+            fireworks.Play(8);
+            audioManager.Play(Sfx.Fanfare);
+            ApplyProgressVisuals();
+            hud.Refresh(TimeUtil.NowUnix);
+            SaveSoon();
+        }
+
+        /// <summary>
+        /// Passage de niveau : le modèle a vidé le parc et le navire. On efface
+        /// les conteneurs affichés, on annule les ordres des grues, le navire
+        /// et les véhicules s'en vont. Le conteneur qui vient d'être livré reste
+        /// sur son véhicule (il part avec lui).
+        /// </summary>
+        void OnTerminalReset()
+        {
+            foreach (var c in cranes) c.CancelPending();
+            ClearSelection();
+            if (dragGhost != null) { Destroy(dragGhost.gameObject); dragGhost = null; }
+
+            var keep = new HashSet<int>();
+            foreach (var view in vehicleViews.Values)
+                foreach (var cv in view.Loaded) if (cv != null) keep.Add(cv.Info.id);
+            var toRemove = new List<int>();
+            foreach (var kv in containerViews)
+            {
+                if (keep.Contains(kv.Key)) continue;
+                bool protectedView = kv.Value == releasingView;
+                foreach (var c in cranes) if (kv.Value == c.Carried) protectedView = true;
+                if (kv.Value != null && !protectedView) Destroy(kv.Value.gameObject);
+                toRemove.Add(kv.Key);
+            }
+            foreach (var id in toRemove) containerViews.Remove(id);
+
+            if (ship.Current == ShipView.State.Docked || ship.Current == ShipView.State.Arriving) ship.Leave();
+            foreach (var view in vehicleViews.Values) view.Leave(0.6f);
+            SaveSoon();
+        }
+
+        // =====================================================================
+        // Services pour les grues (réservations, points de prise et de dépose)
+        // =====================================================================
+
+        public bool IsLockedByOther(Location loc, CraneController crane) =>
+            !loc.IsNone && locks.TryGetValue(loc, out var owner) && owner != crane;
+
+        public void Lock(Location loc, CraneController crane)
+        {
+            if (!loc.IsNone) locks[loc] = crane;
+        }
+
+        public void Unlock(Location loc, CraneController crane)
+        {
+            if (locks.TryGetValue(loc, out var owner) && owner == crane) locks.Remove(loc);
+        }
+
+        /// <summary>Peut-on saisir à cet endroit maintenant ? (navire : seulement à quai)</summary>
         public bool CanPickNow(Location from)
         {
             if (from.kind == LocationKind.Ship && !ship.IsDocked) return false;
             return Model.CanPickFrom(from);
         }
 
-        public bool CanDropNow(Location to, ContainerInfo c, Location from)
+        public bool CanDropNow(Location to, ContainerInfo c, Location from, CraneController crane = null)
         {
             if (to.IsNone || c == null) return false;
+            if (crane != null && (IsLockedByOther(to, crane) || !crane.CanReach(to))) return false;
             // Repli exceptionnel : retour dans la cale d'origine.
             if (to.kind == LocationKind.Ship)
                 return to == from && ship.IsDocked && Model.Data.shipDocked && Model.Data.ship.CanPlace(to.index);
@@ -359,10 +441,11 @@ namespace CraneBay.Game
             return Model.CanDropAt(to, c, from);
         }
 
-        public bool CanStartJob(Location from, Location to)
+        public bool CanStartJob(Location from, Location to, CraneController crane = null)
         {
+            if (crane != null && !crane.CanReach(from)) return false;
             if (!CanPickNow(from)) return false;
-            return CanDropNow(to, Model.PeekTop(from), from);
+            return CanDropNow(to, Model.PeekTop(from), from, crane);
         }
 
         /// <summary>Point de prise : le conteneur du dessus.</summary>
@@ -412,58 +495,67 @@ namespace CraneBay.Game
         {
             double now = TimeUtil.NowUnix;
             var info = view.Info;
-
-            if (to.kind == LocationKind.Ship)
+            releasingView = view;
+            try
             {
-                if (Model.ReturnToShip(to.index, info))
+                if (to.kind == LocationKind.Ship)
                 {
-                    int tier = Model.Data.ship.Height(to.index) - 1;
-                    view.transform.SetParent(ship.Deck, false);
-                    view.transform.localPosition = BoardLayout.ShipSlotLocal(to.index) + BoardLayout.TierOffset(tier);
-                    view.SetTier(tier);
-                    view.PlayLanding();
-                }
-                audioManager.Play(Sfx.Drop);
-                return;
-            }
-
-            if (to.kind == LocationKind.Yard)
-            {
-                var res = Model.Drop(to, info, now);
-                if (res.ok)
-                {
-                    PlaceInYard(view, to.index, Model.Data.yard.Height(to.index) - 1);
-                    view.PlayLanding();
+                    if (Model.ReturnToShip(to.index, info))
+                    {
+                        int tier = Model.Data.ship.Height(to.index) - 1;
+                        view.transform.SetParent(ship.Deck, false);
+                        view.transform.localPosition = BoardLayout.ShipSlotLocal(to.index) + BoardLayout.TierOffset(tier);
+                        view.SetTier(tier);
+                        view.PlayLanding();
+                    }
                     audioManager.Play(Sfx.Drop);
+                    return;
                 }
-                SaveSoon();
-                return;
-            }
 
-            // Livraison à un véhicule.
-            TryGetVehicleView(to, out var vehicleView, out int idx);
-            var r = Model.Drop(to, info, now);
-            if (r.ok && vehicleView != null)
-            {
-                vehicleView.AttachContainer(idx, view);
-                audioManager.Play(Sfx.Drop, 0.7f);
-                audioManager.Play(Sfx.Coin);
-                floating.Spawn(vehicleView.CargoWorld(idx) + new Vector3(0f, 0.6f, 0f), "+" + Hud.FormatMoney(r.earned), Palette.UiGold);
-                if (r.xp > 0)
-                    floating.Spawn(vehicleView.CargoWorld(idx) + new Vector3(0f, 0.05f, 0f), "+" + r.xp + " XP", new Color(0.55f, 0.85f, 1f));
-                SaveSoon();
+                if (to.kind == LocationKind.Yard)
+                {
+                    var res = Model.Drop(to, info, now);
+                    if (res.ok)
+                    {
+                        PlaceInYard(view, to.index, Model.Data.yard.Height(to.index) - 1);
+                        view.PlayLanding();
+                        audioManager.Play(Sfx.Drop);
+                    }
+                    SaveSoon();
+                    return;
+                }
+
+                // Livraison à un véhicule.
+                TryGetVehicleView(to, out var vehicleView, out int idx);
+                Vector3 at = vehicleView != null ? vehicleView.CargoWorld(idx) : view.transform.position;
+                var r = Model.Drop(to, info, now);
+                if (r.ok && vehicleView != null)
+                {
+                    vehicleView.AttachContainer(idx, view);
+                    containerViews.Remove(info.id);
+                    audioManager.Play(Sfx.Drop, 0.7f);
+                    audioManager.Play(Sfx.Coin);
+                    floating.Spawn(at + new Vector3(0f, 0.6f, 0f), "+" + Hud.FormatMoney(r.earned), Palette.UiGold);
+                    if (r.xp > 0)
+                        floating.Spawn(at + new Vector3(0f, 0.05f, 0f), "+" + r.xp + " XP", new Color(0.55f, 0.85f, 1f));
+                    if (r.fast)
+                        floating.Spawn(at + new Vector3(0f, 1.1f, 0f), "RAPIDE !", new Color(1f, 0.6f, 0.2f));
+                    SaveSoon();
+                }
             }
+            finally { releasingView = null; }
         }
 
         /// <summary>Destination de repli quand la destination prévue n'est plus valable.</summary>
-        public Location FallbackFor(ContainerInfo c, Location from, Vector2 cranePos)
+        public Location FallbackFor(ContainerInfo c, Location from, Vector2 cranePos, CraneController crane)
         {
             var g = Model.Data.yard;
             int best = -1;
             float bestDist = float.MaxValue;
             for (int s = 0; s < g.SlotCount; s++)
             {
-                if (!g.CanPlace(s)) continue;
+                var loc = new Location(LocationKind.Yard, s);
+                if (Model.CheckYardPlace(s, c) != PlaceError.Aucune || IsLockedByOther(loc, crane)) continue;
                 float d = ((Vector2)BoardLayout.YardSlotCenter(s) - cranePos).sqrMagnitude;
                 if (d < bestDist) { bestDist = d; best = s; }
             }
@@ -473,6 +565,8 @@ namespace CraneBay.Game
                 return new Location(LocationKind.Yard, best);
             }
             if (from.kind == LocationKind.Ship) return from;
+            // Dernier recours : remettre sur sa pile d'origine, même hors règles.
+            if (from.kind == LocationKind.Yard && g.CanPlace(from.index)) return from;
             return Location.None;
         }
 
@@ -517,7 +611,7 @@ namespace CraneBay.Game
             if (loc == selected) { ClearSelection(); return; }
             if (!loc.IsNone && CanQueue(selected, loc)) { Issue(selected, loc); return; }
             if (IsPickable(loc)) { Select(loc); return; }
-            Feedback(Sfx.Error, DestinationError(loc));
+            Feedback(Sfx.Error, DestinationError(loc, Model.PeekTop(selected)));
             ClearSelection();
         }
 
@@ -545,7 +639,7 @@ namespace CraneBay.Game
             if (!to.IsNone && CanQueue(from, to)) Issue(from, to);
             else
             {
-                if (!to.IsNone) Feedback(Sfx.Error, DestinationError(to));
+                if (!to.IsNone) Feedback(Sfx.Error, DestinationError(to, Model.PeekTop(from)));
                 ClearSelection();
             }
         }
@@ -556,17 +650,34 @@ namespace CraneBay.Game
             return CanStartJob(from, to);
         }
 
-        string DestinationError(Location to)
+        string DestinationError(Location to, ContainerInfo c)
         {
             if (to.kind == LocationKind.Ship) return "On ne recharge pas le navire";
-            if (to.kind == LocationKind.Yard) return "Pile pleine (" + GameRules.YardMaxHeight + " conteneurs max)";
+            if (to.kind == LocationKind.Yard && c != null)
+            {
+                switch (Model.CheckYardPlace(to.index, c))
+                {
+                    case PlaceError.Verrouille: return "Zone verrouillée : achetez « Agrandir le parc »";
+                    case PlaceError.PilePleine: return "Pile pleine (" + Model.YardHeightLimit + " conteneurs max)";
+                    case PlaceError.QuaranteSurVingt: return "Un 40 pieds ne se pose pas sur un 20 pieds";
+                    case PlaceError.Dangereux: return "Matières dangereuses : jamais à côté d'un autre conteneur dangereux";
+                }
+            }
             if (to.IsVehicle) return "Ce véhicule attend une autre couleur";
             return "Destination impossible";
         }
 
+        /// <summary>Confie le mouvement à la grue la plus adaptée (la 2e grue ne va pas au navire).</summary>
         void Issue(Location from, Location to)
         {
-            if (crane.Enqueue(from, to)) audioManager.Play(Sfx.Select);
+            CraneController best = null;
+            foreach (var c in cranes)
+            {
+                if (!c.CanReach(from) || !c.CanReach(to)) continue;
+                if (c.Pending > CraneController.MaxQueue) continue;
+                if (best == null || c.Pending < best.Pending || (c.Pending == best.Pending && !c.IsMain)) best = c;
+            }
+            if (best != null && best.Enqueue(from, to)) audioManager.Play(Sfx.Select);
             else Feedback(Sfx.Error, "La grue a déjà assez d'ordres en attente");
             ClearSelection();
         }
@@ -638,7 +749,7 @@ namespace CraneBay.Game
         public void BuyUpgrade(UpgradeType type)
         {
             double now = TimeUtil.NowUnix;
-            if (GameRules.IsMaxed(Model.Level(type))) { Feedback(Sfx.Error, "Niveau maximum atteint"); return; }
+            if (GameRules.IsMaxed(type, Model.Level(type))) { Feedback(Sfx.Error, "Niveau maximum atteint"); return; }
             if (!Model.TryBuy(type))
             {
                 Feedback(Sfx.Error, "Pas assez d'argent (" + Hud.FormatMoney(Model.NextUpgradeCost(type)) + ")");
@@ -649,8 +760,17 @@ namespace CraneBay.Game
                 Model.Data.nextShipUnix = System.Math.Min(Model.Data.nextShipUnix, now + GameRules.ShipInterval(Model.Level(type)));
             if (type == UpgradeType.AttenteVehicules)
                 Model.nextVehicleUnix = System.Math.Min(Model.nextVehicleUnix, now + GameRules.VehicleInterval(Model.Level(type)));
+            if (type == UpgradeType.DeuxiemeGrue && cranes.Count < 2)
+            {
+                CreateCrane(false);
+                Feedback(Sfx.Upgrade, "2e grue en service : elle dessert le parc, les camions et les trains !");
+            }
+            else if (type == UpgradeType.AgrandirParc)
+                Feedback(Sfx.Upgrade, "Parc agrandi : " + GameRules.EffectLabel(type, Model.Level(type)));
+            else
+                Feedback(Sfx.Upgrade, GameRules.UpgradeNames[(int)type] + " : niveau " + Model.Level(type) + " !");
 
-            Feedback(Sfx.Upgrade, GameRules.UpgradeNames[(int)type] + " : niveau " + Model.Level(type) + " !");
+            ApplyProgressVisuals();
             hud.Refresh(now);
             SaveNow();
         }
@@ -696,24 +816,22 @@ namespace CraneBay.Game
             saveSoonTimer = -1f;
             if (Model == null) return;
 
-            // Un conteneur suspendu à la grue n'est dans aucune pile : on le remet
+            // Un conteneur suspendu à une grue n'est dans aucune pile : on le remet
             // temporairement à sa place d'origine pour ne jamais le perdre.
-            StackGrid restoredIn = null;
-            int restoredSlot = -1;
-            var carried = crane != null ? crane.Carried : null;
-            if (carried != null)
+            var restored = new List<KeyValuePair<StackGrid, int>>();
+            foreach (var crane in cranes)
             {
+                var carried = crane.Carried;
+                if (carried == null) continue;
                 var from = crane.CarriedFrom;
                 var g = Model.GridOf(from.kind);
-                if (g != null && g.Place(from.index, carried.Info)) { restoredIn = g; restoredSlot = from.index; }
-                else if (Model.Data.yard != null)
-                {
-                    for (int s = 0; s < Model.Data.yard.SlotCount && restoredIn == null; s++)
-                        if (Model.Data.yard.Place(s, carried.Info)) { restoredIn = Model.Data.yard; restoredSlot = s; }
-                }
+                if (g != null && g.Place(from.index, carried.Info)) { restored.Add(new KeyValuePair<StackGrid, int>(g, from.index)); continue; }
+                var yard = Model.Data.yard;
+                for (int s = 0; s < yard.SlotCount; s++)
+                    if (yard.Place(s, carried.Info)) { restored.Add(new KeyValuePair<StackGrid, int>(yard, s)); break; }
             }
             SaveSystem.Save(Model.Data);
-            if (restoredIn != null) restoredIn.Pick(restoredSlot);
+            for (int i = restored.Count - 1; i >= 0; i--) restored[i].Key.Pick(restored[i].Value);
         }
 
         void OnApplicationPause(bool paused)

@@ -62,6 +62,28 @@ namespace CraneBay.Game
         public static readonly Color Highlight = Hex("#FFFFFF");
         public static readonly Color ValidTarget = Hex("#3DDC84");
 
+        // --- Ports à thème (eau, quai, sol du parc, herbe/sol, végétation) ---
+        public struct Theme
+        {
+            public Color water, waterLight, quay, asphalt, grass, bush, clear;
+        }
+
+        public static readonly Theme[] Themes =
+        {
+            // Port tempéré
+            new Theme { water = Water, waterLight = WaterLight, quay = Quay, asphalt = Asphalt, grass = Grass, bush = GrassDark, clear = Grass },
+            // Port tropical : lagon turquoise, sable, palmiers
+            new Theme { water = Hex("#22C3C9"), waterLight = Hex("#B5F5F0"), quay = Hex("#F2DFAE"), asphalt = Hex("#9AA3A8"),
+                        grass = Hex("#F4D99A"), bush = Hex("#2FB36B"), clear = Hex("#F4D99A") },
+            // Port polaire : eau froide, neige, sapins
+            new Theme { water = Hex("#3C7FB8"), waterLight = Hex("#DFF4FF"), quay = Hex("#E9EEF3"), asphalt = Hex("#A7B4C2"),
+                        grass = Hex("#F4F8FB"), bush = Hex("#2F6F5A"), clear = Hex("#F4F8FB") },
+        };
+
+        public static readonly Color Night = new Color(0.05f, 0.07f, 0.2f, 1f);
+        public static readonly Color Lamp = new Color(1f, 0.85f, 0.45f, 1f);
+        public static readonly Color Power = Hex("#FFD23F");
+
         // --- Conteneurs (même ordre que l'enum ContainerColor) ---
         static readonly Color[] containerColors =
         {

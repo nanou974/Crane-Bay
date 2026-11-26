@@ -26,7 +26,7 @@ namespace CraneBay.Game
 
         // --- Mer et navire ---
         public const float WaterBottom = 3.9f;
-        public static readonly Vector3 ShipDock = new Vector3(0f, 5.4f, 0f);
+        public static readonly Vector3 ShipDock = new Vector3(0f, 5.25f, 0f);
         public const float ShipOffscreenX = 16f;
         const float ShipSlotSpacingX = 1.85f;
         const float ShipSlotSpacingY = 0.96f;
@@ -56,6 +56,13 @@ namespace CraneBay.Game
         // --- Grue ---
         public const float CraneLegX = 4.95f;
         public static readonly Vector2 CraneRest = new Vector2(0f, 0.8f);
+
+        // --- 2e grue (portique sur pneus du parc, poutre verticale) ---
+        // Elle roule de gauche à droite sur deux rails horizontaux et dessert
+        // le parc, la route et la voie ferrée (pas le navire).
+        public const float SecondCraneTopY = 2.95f;
+        public const float SecondCraneBottomY = -4.5f;
+        public static readonly Vector2 SecondCraneRest = new Vector2(4.62f, -1.5f);
 
         public static Vector3 YardSlotCenter(int slot)
         {

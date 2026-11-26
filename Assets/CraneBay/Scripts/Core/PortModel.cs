@@ -2,8 +2,10 @@
 // Crane Bay - Modèle logique du terminal (sans aucun affichage).
 //
 // Toutes les règles du jeu passent par ici : arrivée/départ des navires,
-// arrivée des camions et trains avec leur demande, validation des mouvements de
-// la grue, paiement, achats d'améliorations, coffres.
+// arrivée des camions et trains (annoncés à l'avance), validation des
+// mouvements de grue (règles d'empilage 20/40 pieds, matières dangereuses,
+// parc verrouillé), frigorifiques, paiement (bonus train et rapidité), XP et
+// niveaux, contrats du jour, statistiques, améliorations, coffres.
 // La couche Unity (GameManager & vues) se contente d'appeler ce modèle et
 // d'animer le résultat. Sans dépendance Unity : testable hors moteur.
 // -----------------------------------------------------------------------------
@@ -57,6 +59,7 @@ namespace CraneBay.Core
         public VehicleKind kind;
         public int bay;                 // baie de camion (0..TruckBays-1), -1 pour le train
         public VehicleState state;
+        public double arrivedUnix;      // heure d'arrivée à quai (bonus de rapidité)
         public double deadlineUnix;     // au-delà, le véhicule repart (même incomplet)
         public double patienceSeconds;
         public readonly List<Demand> demands = new List<Demand>();
@@ -68,6 +71,13 @@ namespace CraneBay.Core
         }
     }
 
+    /// <summary>Véhicule annoncé à l'avance (liste "À venir").</summary>
+    public class PlannedVehicle
+    {
+        public VehicleKind kind;
+        public readonly List<ContainerColor> colors = new List<ContainerColor>();
+    }
+
     /// <summary>Résultat d'une dépose par la grue.</summary>
     public struct DropResult
     {
@@ -75,17 +85,22 @@ namespace CraneBay.Core
         public int earned;          // argent gagné (0 si dépose dans le parc)
         public Vehicle vehicle;     // véhicule servi (null sinon)
         public bool vehicleDone;    // le véhicule est complet et va partir
+        public bool fast;           // bonus de rapidité appliqué
         public int xp;              // XP gagnées par cette livraison
         public int levelsGained;    // nombre de niveaux franchis (0 le plus souvent)
     }
 
-    /// <summary>Passage de niveau : nouveau niveau, prime, couleur débloquée (-1 si aucune).</summary>
+    /// <summary>Passage de niveau : nouveau niveau, prime, nouveautés débloquées.</summary>
     public struct LevelUpInfo
     {
         public int newLevel;
         public int reward;
-        public int unlockedColor;
+        public int unlockedColor;   // -1 si aucune
+        public string unlocks;      // texte des nouveautés (peut être vide)
     }
+
+    /// <summary>Pourquoi une dépose dans le parc est refusée (pour le message au joueur).</summary>
+    public enum PlaceError { Aucune, Verrouille, PilePleine, QuaranteSurVingt, Dangereux }
 
     public class PortModel
     {
@@ -97,10 +112,13 @@ namespace CraneBay.Core
         /// <summary>Véhicules actuellement dans le terminal.</summary>
         public readonly List<Vehicle> vehicles = new List<Vehicle>();
 
+        /// <summary>Prochains véhicules annoncés (non sauvegardé : recalculé au lancement).</summary>
+        public readonly List<PlannedVehicle> upcoming = new List<PlannedVehicle>();
+
         /// <summary>Prochaine arrivée de véhicule (non sauvegardé : recalculé au lancement).</summary>
         public double nextVehicleUnix;
 
-        int vehicleCounter;
+        int plannedCounter;
         int nextVehicleId = 1;
 
         // Événements pour la couche d'affichage (les tests peuvent les ignorer).
@@ -111,6 +129,8 @@ namespace CraneBay.Core
         public event Action MoneyChanged;
         public event Action<LevelUpInfo> LevelUp;
         public event Action TerminalReset;
+        public event Action<Contract> ContractCompleted;
+        public event Action<string> RecordBroken;
 
         public PortModel(SaveData data, double nowUnix)
         {
@@ -126,13 +146,18 @@ namespace CraneBay.Core
         public int Level(UpgradeType t) => Data.upgrades[(int)t];
 
         /// <summary>Somme des niveaux d'amélioration.</summary>
-        public int UpgradeSum => Data.upgrades[0] + Data.upgrades[1] + Data.upgrades[2];
+        public int UpgradeSum
+        {
+            get { int s = 0; foreach (var u in Data.upgrades) s += u; return s; }
+        }
 
         /// <summary>Progression globale (améliorations + niveau) : fait grandir les coffres.</summary>
         public int Progress => UpgradeSum + (Data.level - 1);
 
         public int PlayerLevel => Data.level;
         public bool IsMaxLevel => Data.level >= LevelRules.MaxLevel;
+        public PortTheme Theme => LevelRules.ThemeFor(Data.level);
+        public bool HasSecondCrane => Level(UpgradeType.DeuxiemeGrue) >= 1;
 
         /// <summary>Remplissage de la barre d'XP (0..1).</summary>
         public float XpRatio
@@ -146,11 +171,12 @@ namespace CraneBay.Core
 
         public bool TurboActive(double now) => now < Data.turboEndUnix;
 
-        /// <summary>Multiplicateur de vitesse de grue (amélioration x turbo éventuel).</summary>
+        /// <summary>Multiplicateur de vitesse de grue (amélioration x turbo x météo).</summary>
         public float CraneMultiplier(double now)
         {
             float m = GameRules.CraneSpeedMultiplier(Level(UpgradeType.VitesseGrue));
-            return TurboActive(now) ? m * GameRules.TurboMultiplier : m;
+            if (TurboActive(now)) m *= GameRules.TurboMultiplier;
+            return m * Ambience.CraneFactor(Ambience.WeatherAt(now));
         }
 
         public StackGrid GridOf(LocationKind kind) =>
@@ -181,6 +207,61 @@ namespace CraneBay.Core
         }
 
         // =====================================================================
+        // Parc : zones débloquées et règles d'empilage
+        // =====================================================================
+
+        public int YardRowsUnlocked => GameRules.YardRowsUnlocked(Level(UpgradeType.AgrandirParc));
+        public int YardHeightLimit => GameRules.YardHeightLimit(Level(UpgradeType.AgrandirParc));
+
+        public bool IsYardSlotUnlocked(int slot) =>
+            Data.yard.IsValidSlot(slot) && Data.yard.RowOf(slot) < YardRowsUnlocked;
+
+        public static bool IsPoweredSlot(int slot) => slot / GameRules.YardColumns == GameRules.PoweredRow;
+
+        /// <summary>Capacité utilisable du parc (zones débloquées et hauteur autorisée).</summary>
+        public int YardUsableCapacity => GameRules.YardColumns * YardRowsUnlocked * YardHeightLimit;
+
+        public int YardFreeCapacity
+        {
+            get
+            {
+                int free = 0;
+                for (int s = 0; s < Data.yard.SlotCount; s++)
+                    if (IsYardSlotUnlocked(s)) free += Math.Max(0, YardHeightLimit - Data.yard.Height(s));
+                return free;
+            }
+        }
+
+        /// <summary>Vérifie toutes les règles d'empilage du parc pour ce conteneur.</summary>
+        public PlaceError CheckYardPlace(int slot, ContainerInfo c)
+        {
+            if (!IsYardSlotUnlocked(slot)) return PlaceError.Verrouille;
+            if (Data.yard.Height(slot) >= YardHeightLimit || !Data.yard.CanPlace(slot)) return PlaceError.PilePleine;
+            var top = Data.yard.Top(slot);
+            // Règle réelle : un 40 pieds repose sur les 4 coins d'un autre 40 pieds, jamais sur un 20 pieds.
+            if (!c.IsSmall && top != null && top.IsSmall) return PlaceError.QuaranteSurVingt;
+            if (c.hazard && HazardNear(slot)) return PlaceError.Dangereux;
+            return PlaceError.Aucune;
+        }
+
+        /// <summary>Un conteneur dangereux est-il dans cette pile ou une pile voisine (haut/bas/gauche/droite) ?</summary>
+        bool HazardNear(int slot)
+        {
+            var g = Data.yard;
+            int c = g.ColumnOf(slot), r = g.RowOf(slot);
+            int[] dc = { 0, 1, -1, 0, 0 };
+            int[] dr = { 0, 0, 0, 1, -1 };
+            for (int i = 0; i < dc.Length; i++)
+            {
+                int nc = c + dc[i], nr = r + dr[i];
+                if (nc < 0 || nr < 0 || nc >= g.columns || nr >= g.rows) continue;
+                foreach (var item in g.stacks[g.SlotIndex(nc, nr)].items)
+                    if (item.hazard) return true;
+            }
+            return false;
+        }
+
+        // =====================================================================
         // Règles de la grue
         // =====================================================================
 
@@ -205,7 +286,7 @@ namespace CraneBay.Core
             switch (to.kind)
             {
                 case LocationKind.Yard:
-                    return Data.yard.CanPlace(to.index);
+                    return CheckYardPlace(to.index, c) == PlaceError.Aucune;
                 case LocationKind.Truck:
                 case LocationKind.Wagon:
                     if (!TryGetDemand(to, out var v, out var d)) return false;
@@ -223,8 +304,7 @@ namespace CraneBay.Core
         public ContainerInfo Pick(Location from)
         {
             if (!CanPickFrom(from)) return null;
-            var c = GridOf(from.kind).Pick(from.index);
-            return c;
+            return GridOf(from.kind).Pick(from.index);
         }
 
         /// <summary>
@@ -244,30 +324,77 @@ namespace CraneBay.Core
             if (c == null) return res;
             if (to.kind == LocationKind.Yard)
             {
+                if (CheckYardPlace(to.index, c) != PlaceError.Aucune) return res;
                 res.ok = Data.yard.Place(to.index, c);
                 return res;
             }
             if (!to.IsVehicle || !TryGetDemand(to, out var v, out var d)) return res;
             if (v.state != VehicleState.EnAttente || d.Filled || d.color != c.Color) return res;
 
+            bool train = v.kind == VehicleKind.Train;
+            res.fast = now - v.arrivedUnix <= GameRules.FastDeliverySeconds;
             d.loaded = c;
-            int gain = GameRules.Payout(c.Color, v.kind == VehicleKind.Train);
+            int gain = GameRules.Payout(c, train, res.fast);
             AddMoney(gain);
             Data.delivered++;
+            if (res.fast) Data.fastDeliveries++;
+            if (gain > Data.bestSingleDelivery) { Data.bestSingleDelivery = gain; }
             v.earned += gain;
             res.ok = true;
             res.earned = gain;
             res.vehicle = v;
-            res.xp = LevelRules.XpFor(c.Color, v.kind == VehicleKind.Train);
-            res.levelsGained = AddXp(res.xp);
+            res.xp = LevelRules.XpFor(c.Color, train);
+
             if (v.AllFilled)
             {
                 res.vehicleDone = true;
+                if (train)
+                {
+                    Data.trainsCompleted++;
+                    if (v.earned > Data.bestTrainEarned)
+                    {
+                        bool had = Data.bestTrainEarned > 0;
+                        Data.bestTrainEarned = v.earned;
+                        if (had) RecordBroken?.Invoke("Record : plus gros train (" + v.earned + " $)");
+                    }
+                }
                 StartLeaving(v, now);
             }
+
+            // XP de la livraison puis des contrats éventuels (peuvent faire monter de niveau).
+            int levels = AddXp(res.xp);
+            levels += ProgressContracts(c, train, res.fast);
+            res.levelsGained = levels;
+
             // Nouveau niveau : le terminal repart de zéro.
             if (res.levelsGained > 0) ResetTerminal(now);
             return res;
+        }
+
+        // =====================================================================
+        // Frigorifiques
+        // =====================================================================
+
+        /// <summary>
+        /// Fait vieillir les frigorifiques débranchés (dans le parc, hors rangée
+        /// électrifiée). Le navire et les véhicules ont leurs propres prises.
+        /// Renvoie true si au moins un conteneur a perdu de la valeur.
+        /// </summary>
+        public bool UpdateReefers(float dt)
+        {
+            bool changed = false;
+            var g = Data.yard;
+            for (int s = 0; s < g.SlotCount; s++)
+            {
+                if (IsPoweredSlot(s)) continue;
+                foreach (var c in g.stacks[s].items)
+                {
+                    if (!c.reefer || c.unplugged >= GameRules.ReeferSpoilSeconds) continue;
+                    c.unplugged = Math.Min(GameRules.ReeferSpoilSeconds, c.unplugged + dt);
+                    changed = true;
+                }
+            }
+            return changed;
         }
 
         // =====================================================================
@@ -280,6 +407,7 @@ namespace CraneBay.Core
             if (Data.shipDocked || now < Data.nextShipUnix) return false;
             FillShip(rng);
             Data.shipDocked = true;
+            Data.shipDockedSinceUnix = now;
             ShipArrived?.Invoke();
             return true;
         }
@@ -294,11 +422,19 @@ namespace CraneBay.Core
             var free = new List<int>();
             for (int i = 0; i < cargo; i++)
             {
+                var c = LevelRules.RollContainer(rng, Data.level, Data.nextContainerId);
                 free.Clear();
-                for (int s = 0; s < ship.SlotCount; s++) if (ship.CanPlace(s)) free.Add(s);
+                for (int s = 0; s < ship.SlotCount; s++)
+                {
+                    if (!ship.CanPlace(s)) continue;
+                    var top = ship.Top(s);
+                    if (!c.IsSmall && top != null && top.IsSmall) continue; // même règle qu'au parc
+                    free.Add(s);
+                }
+                if (free.Count == 0) { c.size = 20; for (int s = 0; s < ship.SlotCount; s++) if (ship.CanPlace(s)) free.Add(s); }
                 if (free.Count == 0) break;
-                int slot = free[rng.Next(free.Count)];
-                ship.Place(slot, new ContainerInfo(Data.nextContainerId++, LevelRules.RollColor(rng, Data.level)));
+                Data.nextContainerId++;
+                ship.Place(free[rng.Next(free.Count)], c);
             }
             Data.ship = ship;
         }
@@ -309,13 +445,24 @@ namespace CraneBay.Core
             if (!Data.shipDocked) return;
             Data.shipDocked = false;
             Data.nextShipUnix = now + GameRules.ShipInterval(Level(UpgradeType.AttenteNavires));
+            Data.shipsUnloaded++;
+            if (Data.shipDockedSinceUnix > 0)
+            {
+                double t = now - Data.shipDockedSinceUnix;
+                if (t > 0 && (Data.bestUnloadSeconds <= 0 || t < Data.bestUnloadSeconds))
+                {
+                    bool had = Data.bestUnloadSeconds > 0;
+                    Data.bestUnloadSeconds = t;
+                    if (had) RecordBroken?.Invoke("Record : navire déchargé en " + ChestLogic.Format(t));
+                }
+            }
             ShipDeparting?.Invoke();
         }
 
         public double SecondsUntilShip(double now) => Data.shipDocked ? 0 : Math.Max(0, Data.nextShipUnix - now);
 
         // =====================================================================
-        // Camions et trains
+        // Camions et trains (annoncés à l'avance)
         // =====================================================================
 
         /// <summary>
@@ -325,16 +472,16 @@ namespace CraneBay.Core
         /// </summary>
         public Vehicle UpdateVehicles(double now, Random rng)
         {
-            // Départ des véhicules lassés d'attendre.
             for (int i = 0; i < vehicles.Count; i++)
             {
                 var v = vehicles[i];
                 if (v.state == VehicleState.EnAttente && now >= v.deadlineUnix) StartLeaving(v, now);
             }
 
+            RefillUpcoming(rng);
             if (now < nextVehicleUnix) return null;
 
-            Vehicle created = TrySpawnVehicle(now, rng);
+            Vehicle created = TrySpawnVehicle(rng);
             // Si rien n'a pu arriver (places occupées ou aucun conteneur à demander),
             // on réessaie bientôt sans attendre tout l'intervalle.
             nextVehicleUnix = created != null
@@ -343,37 +490,76 @@ namespace CraneBay.Core
             return created;
         }
 
-        Vehicle TrySpawnVehicle(double now, Random rng)
+        /// <summary>Complète la liste des véhicules annoncés.</summary>
+        void RefillUpcoming(Random rng)
         {
+            if (upcoming.Count >= GameRules.UpcomingCount) return;
+            var available = AvailableColorCounts();
+            foreach (var p in upcoming) foreach (var col in p.colors) available[(int)col]--;
+            while (upcoming.Count < GameRules.UpcomingCount)
+            {
+                // Un véhicule sur trois est un train.
+                plannedCounter++;
+                var p = new PlannedVehicle
+                {
+                    kind = plannedCounter % GameRules.TrainEvery == 0 ? VehicleKind.Train : VehicleKind.Camion,
+                };
+                int count = p.kind == VehicleKind.Train ? GameRules.TrainWagons : 1;
+                for (int i = 0; i < count; i++)
+                {
+                    var color = PickDemandColor(available, rng, Data.level);
+                    available[(int)color]--;
+                    p.colors.Add(color);
+                }
+                upcoming.Add(p);
+            }
+        }
+
+        Vehicle TrySpawnVehicle(Random rng)
+        {
+            if (upcoming.Count == 0) return null;
             var available = AvailableColorCounts();
             int totalAvailable = 0;
             foreach (var n in available) totalAvailable += n;
             if (totalAvailable == 0) return null;
 
-            bool trainFree = Train == null;
             int freeBay = -1;
             for (int b = 0; b < GameRules.TruckBays; b++) if (TruckAt(b) == null) { freeBay = b; break; }
+            bool railFree = Train == null;
 
-            bool wantTrain = trainFree && totalAvailable >= GameRules.TrainWagons &&
-                             (vehicleCounter % GameRules.TrainEvery == GameRules.TrainEvery - 1 || freeBay < 0);
-            if (!wantTrain && freeBay < 0) return null;
+            // On prend le premier véhicule annoncé qui a une place libre
+            // (un train ne bloque pas les camions si la voie est occupée, et inversement).
+            int pick = -1;
+            bool train = false;
+            for (int i = 0; i < upcoming.Count && pick < 0; i++)
+            {
+                bool wantsTrain = upcoming[i].kind == VehicleKind.Train;
+                // Pas assez de conteneurs pour un train : il arrive en camion.
+                if (wantsTrain && totalAvailable < GameRules.TrainWagons) wantsTrain = false;
+                if (wantsTrain && railFree) { pick = i; train = true; }
+                else if (!wantsTrain && freeBay >= 0) { pick = i; train = false; }
+            }
+            if (pick < 0) return null;
+            var plan = upcoming[pick];
 
             var v = new Vehicle
             {
                 id = nextVehicleId++,
-                kind = wantTrain ? VehicleKind.Train : VehicleKind.Camion,
-                bay = wantTrain ? -1 : freeBay,
+                kind = train ? VehicleKind.Train : VehicleKind.Camion,
+                bay = train ? -1 : freeBay,
                 state = VehicleState.Arrivee,
+                patienceSeconds = train ? TrainPatience : TruckPatience,
             };
-            v.patienceSeconds = wantTrain ? TrainPatience : TruckPatience;
-            int count = wantTrain ? GameRules.TrainWagons : 1;
+            int count = train ? GameRules.TrainWagons : 1;
             for (int i = 0; i < count; i++)
             {
-                var color = PickDemandColor(available, rng);
+                // On respecte l'annonce si possible ; sinon on remplace par une couleur disponible.
+                ContainerColor color = i < plan.colors.Count ? plan.colors[i] : ContainerColor.Blanc;
+                if (available[(int)color] <= 0) color = PickDemandColor(available, rng, Data.level);
                 available[(int)color]--;
                 v.demands.Add(new Demand { color = color });
             }
-            vehicleCounter++;
+            upcoming.RemoveAt(pick);
             vehicles.Add(v);
             VehicleSpawned?.Invoke(v);
             return v;
@@ -388,8 +574,7 @@ namespace CraneBay.Core
         public int[] AvailableColorCounts()
         {
             var counts = new int[GameRules.ColorCount];
-            int yardFree = Data.yard.Capacity - Data.yard.TotalCount();
-            if (yardFree <= 1)
+            if (YardFreeCapacity <= 1)
             {
                 AddTops(Data.yard, counts);
                 if (Data.shipDocked) AddTops(Data.ship, counts);
@@ -418,14 +603,19 @@ namespace CraneBay.Core
             }
         }
 
-        /// <summary>Tire une couleur au hasard, proportionnellement à la disponibilité.</summary>
-        static ContainerColor PickDemandColor(int[] available, Random rng)
+        /// <summary>
+        /// Tire une couleur proportionnellement à la disponibilité ; s'il n'y a
+        /// rien de disponible (annonce lointaine), on tire parmi les couleurs débloquées.
+        /// </summary>
+        static ContainerColor PickDemandColor(int[] available, Random rng, int level)
         {
             int total = 0;
-            foreach (var n in available) total += n;
-            int r = rng.Next(Math.Max(1, total));
+            foreach (var n in available) if (n > 0) total += n;
+            if (total <= 0) return LevelRules.RollColor(rng, level);
+            int r = rng.Next(total);
             for (int i = 0; i < available.Length; i++)
             {
+                if (available[i] <= 0) continue;
                 if (r < available[i]) return (ContainerColor)i;
                 r -= available[i];
             }
@@ -437,6 +627,7 @@ namespace CraneBay.Core
         {
             if (v.state != VehicleState.Arrivee) return;
             v.state = VehicleState.EnAttente;
+            v.arrivedUnix = now;
             v.deadlineUnix = now + v.patienceSeconds;
         }
 
@@ -457,30 +648,29 @@ namespace CraneBay.Core
             return (float)Math.Max(0, Math.Min(1, (v.deadlineUnix - now) / v.patienceSeconds));
         }
 
-        // =====================================================================
-        // Économie
-        // =====================================================================
+        /// <summary>Le bonus de rapidité est-il encore possible pour ce véhicule ?</summary>
+        public static bool FastBonusActive(Vehicle v, double now) =>
+            v.state == VehicleState.EnAttente && now - v.arrivedUnix <= GameRules.FastDeliverySeconds;
 
-        void AddMoney(long amount)
-        {
-            Data.money += amount;
-            if (amount > 0) Data.totalEarned += amount;
-            MoneyChanged?.Invoke();
-        }
+        // =====================================================================
+        // Niveaux
+        // =====================================================================
 
         /// <summary>
         /// Remise à zéro du terminal (au passage de niveau) : parc et navire vidés,
         /// tous les véhicules repartent, un nouveau navire arrive peu après.
-        /// L'argent, les améliorations, le niveau et les coffres sont conservés.
+        /// L'argent, les améliorations, le niveau, les contrats et les coffres sont conservés.
         /// </summary>
         public void ResetTerminal(double now)
         {
             Data.yard = new StackGrid(GameRules.YardColumns, GameRules.YardRows, GameRules.YardMaxHeight);
             Data.ship = new StackGrid(GameRules.ShipColumns, GameRules.ShipRows, GameRules.ShipMaxHeight);
             Data.shipDocked = false;
+            Data.shipDockedSinceUnix = 0;
             Data.nextShipUnix = now + 4;
             // Départ silencieux : ce n'est pas une impatience du chauffeur.
             foreach (var v in vehicles) v.state = VehicleState.Depart;
+            upcoming.Clear();
             nextVehicleUnix = now + 8;
             TerminalReset?.Invoke();
         }
@@ -501,6 +691,7 @@ namespace CraneBay.Core
                     newLevel = Data.level,
                     reward = LevelRules.LevelUpReward(Data.level),
                     unlockedColor = LevelRules.ColorUnlockedAt(Data.level),
+                    unlocks = LevelRules.UnlocksAt(Data.level),
                 };
                 AddMoney(info.reward);
                 LevelUp?.Invoke(info);
@@ -509,10 +700,52 @@ namespace CraneBay.Core
             return gained;
         }
 
+        // =====================================================================
+        // Contrats du jour
+        // =====================================================================
+
+        /// <summary>Renouvelle les contrats au changement de jour (UTC). Renvoie true si renouvelés.</summary>
+        public bool EnsureContracts(double now, Random rng)
+        {
+            long day = ContractRules.DayIndex(now);
+            if (Data.contractsDay == day && Data.contracts.Count == ContractRules.Count) return false;
+            Data.contractsDay = day;
+            Data.contracts = ContractRules.Generate(rng, Data.level);
+            return true;
+        }
+
+        /// <summary>Fait progresser les contrats. Renvoie le nombre de niveaux gagnés grâce aux récompenses.</summary>
+        int ProgressContracts(ContainerInfo c, bool train, bool fast)
+        {
+            int levels = 0;
+            foreach (var k in Data.contracts)
+            {
+                if (!ContractRules.Matches(k, c, train, fast)) continue;
+                k.progress++;
+                if (k.progress < k.target) continue;
+                k.done = true;
+                AddMoney(k.rewardMoney);
+                ContractCompleted?.Invoke(k);
+                levels += AddXp(k.rewardXp);
+            }
+            return levels;
+        }
+
+        // =====================================================================
+        // Économie
+        // =====================================================================
+
+        void AddMoney(long amount)
+        {
+            Data.money += amount;
+            if (amount > 0) Data.totalEarned += amount;
+            MoneyChanged?.Invoke();
+        }
+
         public int NextUpgradeCost(UpgradeType t) => GameRules.UpgradeCost(t, Level(t), Data.level);
 
         public bool CanBuy(UpgradeType t) =>
-            !GameRules.IsMaxed(Level(t)) && Data.money >= NextUpgradeCost(t);
+            !GameRules.IsMaxed(t, Level(t)) && Data.money >= NextUpgradeCost(t);
 
         /// <summary>Achète le niveau suivant d'une amélioration si possible.</summary>
         public bool TryBuy(UpgradeType t)
@@ -520,7 +753,6 @@ namespace CraneBay.Core
             if (!CanBuy(t)) return false;
             Data.money -= NextUpgradeCost(t);
             Data.upgrades[(int)t]++;
-            // Une attente réduite s'applique tout de suite au compte à rebours en cours.
             MoneyChanged?.Invoke();
             return true;
         }

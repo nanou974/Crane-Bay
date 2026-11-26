@@ -24,6 +24,10 @@ static class Program
         VehiclePatienceAndNoDeadlock();
         PlayerLevels();
         LevelUpResetsTerminal();
+        NewStackingRules();
+        ReefersAndBonus();
+        UpcomingAndContracts();
+        AmbienceThemesRecords();
         Console.WriteLine(failures == 0 ? $"OK : {checks} vérifications réussies" : $"{failures}/{checks} vérifications en échec");
         return failures == 0 ? 0 : 1;
     }
@@ -68,7 +72,7 @@ static class Program
     static void UpgradeCosts()
     {
         foreach (UpgradeType t in Enum.GetValues(typeof(UpgradeType)))
-            for (int l = 0; l < GameRules.UpgradeMaxLevel - 1; l++)
+            for (int l = 0; l < GameRules.MaxLevelOf(t) - 1; l++)
                 Check(GameRules.UpgradeCost(t, l + 1) > GameRules.UpgradeCost(t, l), $"coût croissant {t} {l}");
         foreach (UpgradeType t in Enum.GetValues(typeof(UpgradeType)))
             for (int pl = 1; pl < LevelRules.MaxLevel; pl++)
@@ -89,7 +93,7 @@ static class Program
         var d = new SaveData { upgrades = new[] { 99 }, money = -5, yard = new StackGrid(2, 2, 2), ship = null, shipDocked = true, nextShipUnix = now + 1e9 };
         d.yard.Place(0, new ContainerInfo(42, ContainerColor.Rouge));
         d.Sanitize(now);
-        Check(d.upgrades.Length == 3 && d.upgrades[0] == GameRules.UpgradeMaxLevel, "niveaux réparés");
+        Check(d.upgrades.Length == GameRules.UpgradeCount && d.upgrades[0] == GameRules.UpgradeMaxLevel, "niveaux réparés");
         Check(d.money == 0, "argent négatif corrigé");
         Check(d.yard.HasShape(GameRules.YardColumns, GameRules.YardRows, GameRules.YardMaxHeight) && d.yard.TotalCount() == 1, "parc redimensionné sans perte");
         Check(!d.shipDocked, "navire vide renvoyé");
@@ -287,5 +291,162 @@ static class Program
         Check(m.Data.upgrades[0] == 2 && m.Data.money > 0, "argent et améliorations conservés");
         foreach (var veh in m.vehicles) Check(veh.state == VehicleState.Depart, "tous les véhicules repartent");
         Check(m.UpdateShip(now + 5, rng) && m.Data.ship.TotalCount() > 0, "un nouveau navire arrive ensuite");
+    }
+
+    static Location Y(int slot) => new Location(LocationKind.Yard, slot);
+
+    static void NewStackingRules()
+    {
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        var small = new ContainerInfo(1, ContainerColor.Bleu, 20);
+        var big = new ContainerInfo(2, ContainerColor.Bleu, 40);
+        Check(m.Drop(Y(0), small, now).ok, "20 pieds au sol");
+        Check(m.CheckYardPlace(0, big) == PlaceError.QuaranteSurVingt, "40 pieds interdit sur un 20 pieds");
+        Check(m.Drop(Y(1), big, now).ok && m.CheckYardPlace(1, new ContainerInfo(3, ContainerColor.Blanc, 20)) == PlaceError.Aucune, "20 pieds autorisé sur un 40 pieds");
+
+        var hz = new ContainerInfo(4, ContainerColor.Rouge, 40, hazard: true);
+        Check(m.Drop(Y(7), hz, now).ok, "dangereux posé");
+        var hz2 = new ContainerInfo(5, ContainerColor.Rouge, 40, hazard: true);
+        Check(m.CheckYardPlace(8, hz2) == PlaceError.Dangereux, "dangereux interdit à côté (droite)");
+        Check(m.CheckYardPlace(2, hz2) == PlaceError.Dangereux, "dangereux interdit à côté (dessus)");
+        Check(m.CheckYardPlace(7, hz2) == PlaceError.Dangereux, "dangereux interdit sur un dangereux");
+        Check(m.CheckYardPlace(13, hz2) == PlaceError.Aucune, "dangereux autorisé en diagonale");
+        Check(m.CheckYardPlace(8, new ContainerInfo(6, ContainerColor.Blanc)) == PlaceError.Aucune, "conteneur normal à côté d'un dangereux");
+
+        int lockedSlot = GameRules.YardColumns * 3; // 4e rangée
+        Check(m.CheckYardPlace(lockedSlot, big) == PlaceError.Verrouille, "4e rangée verrouillée au départ");
+        for (int i = 0; i < 3; i++) m.Data.yard.Place(10, new ContainerInfo(100 + i, ContainerColor.Blanc));
+        Check(m.CheckYardPlace(10, big) == PlaceError.PilePleine, "hauteur 3 au départ");
+        m.Data.money = 1_000_000;
+        Check(m.TryBuy(UpgradeType.AgrandirParc) && m.CheckYardPlace(lockedSlot, big) == PlaceError.Aucune, "agrandissement : 4e rangée");
+        Check(m.TryBuy(UpgradeType.AgrandirParc) && m.CheckYardPlace(10, big) == PlaceError.Aucune, "agrandissement : hauteur 4");
+        Check(!m.CanBuy(UpgradeType.AgrandirParc), "parc au maximum");
+        Check(!m.HasSecondCrane && m.TryBuy(UpgradeType.DeuxiemeGrue) && m.HasSecondCrane && !m.CanBuy(UpgradeType.DeuxiemeGrue), "2e grue achetée une seule fois");
+
+        // Navires : jamais de 40 pieds posé sur un 20 pieds dans les cales.
+        var rng = new Random(5);
+        var m2 = new PortModel(null, now);
+        m2.Data.level = 12;
+        for (int k = 0; k < 50; k++)
+        {
+            m2.Data.shipDocked = false; m2.Data.nextShipUnix = 0;
+            m2.UpdateShip(now, rng);
+            var g = m2.Data.ship;
+            for (int sl = 0; sl < g.SlotCount; sl++)
+                for (int t = 1; t < g.Height(sl); t++)
+                    Check(!(g.At(sl, t - 1).IsSmall && !g.At(sl, t).IsSmall), "cale : pas de 40 sur 20");
+        }
+    }
+
+    static void ReefersAndBonus()
+    {
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        var cold = new ContainerInfo(1, ContainerColor.Vert, 40, reefer: true);
+        var plugged = new ContainerInfo(2, ContainerColor.Vert, 40, reefer: true);
+        m.Drop(Y(GameRules.YardColumns + 1), cold, now);   // 2e rangée : pas de prise
+        m.Drop(Y(1), plugged, now);                          // 1re rangée : électrifiée
+        int v0 = GameRules.ValueOf(cold);
+        for (int i = 0; i < 30; i++) m.UpdateReefers(1f);
+        Check(GameRules.ValueOf(cold) < v0, "frigorifique débranché : valeur en baisse");
+        Check(GameRules.ValueOf(plugged) == v0, "frigorifique branché : valeur intacte");
+        for (int i = 0; i < 500; i++) m.UpdateReefers(1f);
+        Check(GameRules.Freshness(cold) >= GameRules.ReeferMinFactor - 1e-6, "valeur minimale garantie");
+        Check(GameRules.ValueOf(new ContainerInfo(3, ContainerColor.Dore, 20)) < GameRules.ValueOf(new ContainerInfo(4, ContainerColor.Dore, 40)), "20 pieds vaut moins");
+        var basic = new ContainerInfo(5, ContainerColor.Rouge);
+        Check(GameRules.Payout(basic, false, true) == (int)Math.Round(100 * GameRules.FastBonus), "bonus rapidité +20 %");
+    }
+
+    static void UpcomingAndContracts()
+    {
+        var rng = new Random(21);
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.UpdateShip(now + 2, rng);
+        m.nextVehicleUnix = now + 1000;
+        m.UpdateVehicles(now, rng);
+        Check(m.upcoming.Count == GameRules.UpcomingCount, "3 véhicules annoncés");
+        var firstColors = new List<ContainerColor>(m.upcoming[0].colors);
+        var kind = m.upcoming[0].kind;
+        m.nextVehicleUnix = now;
+        var v = m.UpdateVehicles(now, rng);
+        Check(v != null && v.kind == kind, "le véhicule annoncé arrive");
+        if (v != null && v.demands.Count == firstColors.Count)
+            for (int i = 0; i < firstColors.Count; i++) Check(v.demands[i].color == firstColors[i], "couleur annoncée respectée");
+        Check(m.upcoming.Count == GameRules.UpcomingCount - 1, "annonce consommée");
+        m.UpdateVehicles(now, rng);
+        Check(m.upcoming.Count == GameRules.UpcomingCount, "annonces complétées");
+
+        Check(m.EnsureContracts(now, rng) && m.Data.contracts.Count == ContractRules.Count, "3 contrats du jour");
+        Check(!m.EnsureContracts(now + 60, rng), "même jour : mêmes contrats");
+        Check(m.EnsureContracts(now + 86400, rng), "jour suivant : nouveaux contrats");
+        // Contrat sur mesure : 2 conteneurs bleus.
+        m.Data.contracts[0] = new Contract { color = (int)ContainerColor.Bleu, target = 2, rewardMoney = 500, rewardXp = 1 };
+        var done = new List<Contract>();
+        m.ContractCompleted += done.Add;
+        Check(ContractRules.Matches(m.Data.contracts[0], new ContainerInfo(1, ContainerColor.Bleu), false, false), "contrat : bonne couleur");
+        Check(!ContractRules.Matches(m.Data.contracts[0], new ContainerInfo(1, ContainerColor.Rouge), false, false), "contrat : mauvaise couleur");
+        Check(!ContractRules.Matches(new Contract { vehicle = 1, target = 1 }, new ContainerInfo(1, ContainerColor.Bleu), false, false), "contrat train : camion refusé");
+        foreach (var c in m.Data.contracts) Check(c.Describe().StartsWith("Livrer "), "description lisible");
+
+        // Livraison réelle de deux bleus via des camions.
+        int delivered = 0;
+        for (int step = 0; step < 4000 && delivered < 2; step++)
+        {
+            now += 1;
+            m.UpdateShip(now, rng);
+            var nv = m.UpdateVehicles(now, rng);
+            if (nv != null) m.MarkArrived(nv, now);
+            foreach (var veh in m.vehicles.ToArray()) if (veh.state == VehicleState.Depart) m.RemoveVehicle(veh);
+            foreach (var veh in m.vehicles)
+            {
+                if (veh.state != VehicleState.EnAttente) continue;
+                for (int i = 0; i < veh.demands.Count; i++)
+                {
+                    if (veh.demands[i].color != ContainerColor.Bleu) continue;
+                    var to = veh.kind == VehicleKind.Train ? new Location(LocationKind.Wagon, i) : new Location(LocationKind.Truck, veh.bay);
+                    for (int sl = 0; sl < m.Data.ship.SlotCount; sl++)
+                    {
+                        var from = new Location(LocationKind.Ship, sl);
+                        if (m.CanMove(from, to)) { m.Drop(to, m.Pick(from), now); delivered++; goto next; }
+                    }
+                }
+            }
+            if (m.ShipNeedsDeparture) m.DepartShip(now);
+            if (!m.Data.shipDocked) m.Data.nextShipUnix = Math.Min(m.Data.nextShipUnix, now);
+            next:;
+        }
+        Check(delivered >= 2 && done.Count >= 1 && m.Data.contracts[0].done, "contrat rempli après 2 bleus");
+    }
+
+    static void AmbienceThemesRecords()
+    {
+        double t0 = 1_700_000_000;
+        bool day = false, night = false;
+        for (int i = 0; i < 600; i++)
+        {
+            float n = Ambience.NightAmount(t0 + i);
+            Check(n >= 0 && n <= 1, "nuit entre 0 et 1");
+            if (n < 0.01f) day = true;
+            if (n > 0.99f) night = true;
+        }
+        Check(day && night, "le cycle contient un jour et une nuit");
+        Check(Ambience.WeatherAt(t0) == Ambience.WeatherAt(t0 + 1), "météo stable sur un bloc");
+        var seen = new HashSet<Weather>();
+        for (int i = 0; i < 300; i++) seen.Add(Ambience.WeatherAt(t0 + i * Ambience.WeatherBlockSeconds));
+        Check(seen.Count == 3, "les trois météos existent");
+        Check(Ambience.CraneFactor(Weather.Vent) < 1f, "le vent ralentit la grue");
+
+        Check(LevelRules.ThemeFor(1) == PortTheme.Tempere && LevelRules.ThemeFor(10) == PortTheme.Tropical && LevelRules.ThemeFor(25) == PortTheme.Polaire, "ports à thème");
+        Check(LevelRules.UnlocksAt(3).Contains("frigorifiques") && LevelRules.UnlocksAt(10).Contains("tropical"), "nouveautés annoncées");
+
+        var rng = new Random(2);
+        var m = new PortModel(null, t0);
+        m.UpdateShip(t0 + 2, rng);
+        while (!m.Data.ship.IsEmpty)
+            for (int sl = 0; sl < m.Data.ship.SlotCount; sl++) m.Data.ship.Pick(sl);
+        m.DepartShip(t0 + 62);
+        Check(Math.Abs(m.Data.bestUnloadSeconds - 60) < 1e-6 && m.Data.shipsUnloaded == 1, "record de déchargement");
     }
 }
