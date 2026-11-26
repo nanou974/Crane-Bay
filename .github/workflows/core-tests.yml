@@ -1,0 +1,17 @@
+# Tests de la logique du jeu (Assets/CraneBay/Scripts/Core) sans Unity.
+name: Tests logique
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Lancer les tests
+        run: dotnet run --project Tests/CoreTests
