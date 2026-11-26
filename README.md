@@ -86,8 +86,9 @@ Le projet n'ajoute aucun package en dehors de uGUI et des modules standard (voir
 
 1. Cloner le dépôt.
 2. Dans Unity Hub, cliquer sur **Add > Add project from disk** et choisir le dossier du dépôt.
-   Choisir une version Unity 6 LTS si le Hub en demande une.
-3. Au premier chargement, Unity génère `Library/` et `ProjectSettings/`, puis le script
+   Le dossier `ProjectSettings/` contient `ProjectVersion.txt` (Unity 6000.0.85f2) : c'est lui qui permet
+   au Hub de reconnaître le projet. Avec une autre version de Unity 6, le Hub propose de le convertir.
+3. Au premier chargement, Unity génère `Library/` et complète `ProjectSettings/`, puis le script
    `ProjectSetup` configure tout seul le projet :
    - il crée la scène `Assets/Scenes/Main.unity` et l'ajoute au build ;
    - il règle Android : portrait, paquet `com.cranebay.prototype`, IL2CPP + ARM64, Gamma, APK (pas AAB).
