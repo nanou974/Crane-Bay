@@ -99,7 +99,7 @@ namespace CraneBay.EditorTools
             var summary = report.summary;
             if (summary.result == BuildResult.Succeeded)
             {
-                Debug.Log($"[CraneBay] APK généré : {OutputPath} ({summary.totalSize / (1024 * 1024f):0.0} Mo)");
+                Debug.Log($"[CraneBay] APK généré : {OutputPath} ({new FileInfo(OutputPath).Length / (1024 * 1024f):0.0} Mo)");
                 return true;
             }
             Debug.LogError("[CraneBay] Échec du build : " + summary.result + " (" + summary.totalErrors + " erreur(s), voir la console)");
