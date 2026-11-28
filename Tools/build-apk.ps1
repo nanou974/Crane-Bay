@@ -4,6 +4,7 @@
 # Exemples (PowerShell, depuis n'importe où) :
 #   E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2
 #   E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2 -Release   # + préversion GitHub
+#   ... -Release -Title "Bonus et séries" -NotesFile notes.md          # avec une vraie description
 #
 # Étapes : met le dépôt à jour depuis GitHub (branche main par défaut), lance
 # Unity en mode batch, puis copie l'APK en Builds\Android\CraneBay_v<version>.apk.
@@ -19,6 +20,11 @@ param(
     [string]$Branch = "main",
     [string]$UnityExe = "E:\Unity\Editor\Unity.exe",
     [switch]$Release,
+    # Titre court de la release (ex. "Bonus et séries") et notes en Markdown
+    # sur ce qui change pour le joueur. Sans notes, une ligne générique est mise.
+    [string]$Title = "",
+    [string]$Notes = "",
+    [string]$NotesFile = "",
     [switch]$NoUpdate
 )
 
@@ -67,7 +73,13 @@ if ($Release) {
     }
     $repo = "nanou974/crane-bay"
     Write-Host "== Publication de la préversion $Version sur $repo"
+    $fullTitle = if ($Title) { "v$Version : $Title" } else { "Pre-release v$Version" }
+    if ($NotesFile) { $Notes = [IO.File]::ReadAllText((Resolve-Path $NotesFile)) }
+    if (-not $Notes) { $Notes = "APK de test construit automatiquement." }
+    $Notes = $Notes.TrimEnd() + "`n`n_Construit depuis $Branch (commit $Commit)._`n"
+    $tmpNotes = Join-Path $env:TEMP "cranebay-notes-$Version.md"
+    [IO.File]::WriteAllText($tmpNotes, $Notes)
     & $gh release create $Version $FinalApk --repo $repo --target $Branch --prerelease `
-        --title "Pre-release v$Version" --notes "APK de test construit automatiquement depuis $Branch (commit $Commit)."
+        --title $fullTitle --notes-file $tmpNotes
     if ($LASTEXITCODE -ne 0) { throw "gh release create a échoué" }
 }
