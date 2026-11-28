@@ -59,12 +59,15 @@ $size = "{0:N1}" -f ((Get-Item $FinalApk).Length / 1MB)
 Write-Host "== APK prêt : $FinalApk ($size Mo)" -ForegroundColor Green
 
 if ($Release) {
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    # gh peut manquer dans le PATH d'une session ouverte avant son installation.
+    $gh = (Get-Command gh -ErrorAction SilentlyContinue).Source
+    if (-not $gh -and (Test-Path "$env:ProgramFiles\GitHub CLI\gh.exe")) { $gh = "$env:ProgramFiles\GitHub CLI\gh.exe" }
+    if (-not $gh) {
         throw "GitHub CLI absent : installez-le (winget install GitHub.cli) puis 'gh auth login'."
     }
     $repo = "nanou974/crane-bay"
     Write-Host "== Publication de la préversion $Version sur $repo"
-    gh release create $Version $FinalApk --repo $repo --target $Branch --prerelease `
+    & $gh release create $Version $FinalApk --repo $repo --target $Branch --prerelease `
         --title "Pre-release v$Version" --notes "APK de test construit automatiquement depuis $Branch (commit $Commit)."
     if ($LASTEXITCODE -ne 0) { throw "gh release create a échoué" }
 }
