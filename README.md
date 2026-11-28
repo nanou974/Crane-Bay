@@ -44,6 +44,17 @@ barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis
 
 Les règles sont dans `Core/LevelRules.cs`.
 
+**Fin de niveau :**
+- *Étoiles* : la bannière fait le bilan du niveau, de 1 à 3 étoiles. On a 1 étoile d'office, +1 si au plus un
+  véhicule est reparti sans être servi, et +1 si au moins un quart des livraisons ont eu le bonus rapidité.
+  La prime de niveau est multipliée par 1, 1,5 ou 2, et 3 étoiles offrent un turbo de grue de 2 min.
+- *Carte au choix* : ensuite, le joueur choisit une récompense parmi trois cartes : de l'argent
+  (100 $ × niveau), un turbo de 3 min, ou un niveau gratuit sur l'amélioration la moins chère.
+
+**Série de jours :** le coffre du jour suit une série de 7 jours (« Jour 3/7 » sur le bouton). Chaque jour
+d'affilée ajoute +25 % d'argent, jusqu'à x2,5 au 7e jour, qui offre aussi un long turbo. Une absence de plus
+de 48 h depuis la dernière ouverture remet la série au jour 1.
+
 **Feu d'artifice :** chaque passage de niveau déclenche un feu d'artifice (fusées, gerbes d'étincelles,
 sifflements et détonations), une fanfare et une bannière qui annonce la prime et les nouveautés.
 

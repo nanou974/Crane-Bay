@@ -97,7 +97,14 @@ namespace CraneBay.Core
         public int reward;
         public int unlockedColor;   // -1 si aucune
         public string unlocks;      // texte des nouveautés (peut être vide)
+        public int stars;           // bilan du niveau terminé : 1 à 3 étoiles
+        public int baseReward;      // prime avant le bonus des étoiles
+        public double turboSeconds; // turbo offert (3 étoiles), 0 sinon
+        public int delivered, fast, missed; // bilan affiché
     }
+
+    /// <summary>Les trois cartes proposées en fin de niveau.</summary>
+    public enum LevelCard { Argent = 0, Turbo = 1, Amelioration = 2 }
 
     /// <summary>Pourquoi une dépose dans le parc est refusée (pour le message au joueur).</summary>
     public enum PlaceError { Aucune, Verrouille, PilePleine, QuaranteSurVingt, Dangereux }
@@ -128,12 +135,17 @@ namespace CraneBay.Core
         public event Action ShipDeparting;
         public event Action MoneyChanged;
         public event Action<LevelUpInfo> LevelUp;
+
+        /// <summary>Dernière heure connue du modèle (pour dater le turbo offert au passage de niveau).</summary>
+        double clock;
+        double TurboClock => clock;
         public event Action TerminalReset;
         public event Action<Contract> ContractCompleted;
         public event Action<string> RecordBroken;
 
         public PortModel(SaveData data, double nowUnix)
         {
+            clock = nowUnix;
             Data = data ?? SaveData.NewGame(nowUnix);
             Data.Sanitize(nowUnix);
             nextVehicleUnix = nowUnix + 4; // premier camion peu après le lancement
@@ -320,6 +332,7 @@ namespace CraneBay.Core
         /// <summary>Pose le conteneur porté par la grue. Paie si c'est une livraison.</summary>
         public DropResult Drop(Location to, ContainerInfo c, double now)
         {
+            clock = Math.Max(clock, now);
             var res = new DropResult();
             if (c == null) return res;
             if (to.kind == LocationKind.Yard)
@@ -338,6 +351,8 @@ namespace CraneBay.Core
             AddMoney(gain);
             Data.delivered++;
             if (res.fast) Data.fastDeliveries++;
+            Data.levelDelivered++;
+            if (res.fast) Data.levelFast++;
             if (gain > Data.bestSingleDelivery) { Data.bestSingleDelivery = gain; }
             v.earned += gain;
             res.ok = true;
@@ -404,6 +419,7 @@ namespace CraneBay.Core
         /// <summary>Met à jour l'arrivée du navire. Renvoie true si un navire vient d'arriver.</summary>
         public bool UpdateShip(double now, Random rng)
         {
+            clock = Math.Max(clock, now);
             if (Data.shipDocked || now < Data.nextShipUnix) return false;
             FillShip(rng);
             Data.shipDocked = true;
@@ -472,6 +488,7 @@ namespace CraneBay.Core
         /// </summary>
         public Vehicle UpdateVehicles(double now, Random rng)
         {
+            clock = Math.Max(clock, now);
             for (int i = 0; i < vehicles.Count; i++)
             {
                 var v = vehicles[i];
@@ -642,9 +659,61 @@ namespace CraneBay.Core
         void StartLeaving(Vehicle v, double now)
         {
             if (v.state == VehicleState.Depart) return;
+            if (!v.AllFilled) Data.levelMissed++;
             v.state = VehicleState.Depart;
             VehicleLeaving?.Invoke(v);
         }
+
+        // =====================================================================
+        // Carte au choix de fin de niveau
+        // =====================================================================
+
+        public bool HasPendingCard => Data.pendingCards > 0;
+
+        /// <summary>
+        /// Amélioration offerte par la carte "Amélioration" : la moins chère des
+        /// améliorations pas encore au maximum. -1 si tout est au maximum.
+        /// </summary>
+        public int FreeUpgradeOption()
+        {
+            int best = -1;
+            long bestCost = long.MaxValue;
+            for (int i = 0; i < GameRules.UpgradeCount; i++)
+            {
+                var t = (UpgradeType)i;
+                if (GameRules.IsMaxed(t, Level(t))) continue;
+                long cost = NextUpgradeCost(t);
+                if (cost < bestCost) { bestCost = cost; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>Applique la carte choisie. Renvoie false s'il n'y a pas de carte à choisir.</summary>
+        public bool ChooseCard(LevelCard card, double now)
+        {
+            if (!HasPendingCard) return false;
+            int upgrade = FreeUpgradeOption();
+            // Tout est déjà au maximum : la carte amélioration devient de l'argent.
+            if (card == LevelCard.Amelioration && upgrade < 0) card = LevelCard.Argent;
+            switch (card)
+            {
+                case LevelCard.Argent:
+                    AddMoney(LevelRules.CardMoney(Data.level));
+                    break;
+                case LevelCard.Turbo:
+                    Data.turboEndUnix = Math.Max(Data.turboEndUnix, now) + LevelRules.CardTurboSeconds;
+                    break;
+                default:
+                    Data.upgrades[upgrade]++;
+                    break;
+            }
+            Data.pendingCards--;
+            return true;
+        }
+
+        /// <summary>Jour de série (1 à 7) qu'apportera la prochaine ouverture du coffre du jour.</summary>
+        public int NextStreakDay(double now) =>
+            ChestLogic.StreakDay(ChestLogic.NextStreak(Data.dailyStreak, Data.lastDailyChestUnix, now));
 
         /// <summary>
         /// Pause : décale toutes les échéances de jeu (navire, véhicules, turbo,
@@ -724,6 +793,7 @@ namespace CraneBay.Core
         /// </summary>
         public int TryLevelUp(double now)
         {
+            clock = Math.Max(clock, now);
             int gained = ApplyLevels();
             if (gained > 0) ResetTerminal(now);
             return gained;
@@ -750,14 +820,27 @@ namespace CraneBay.Core
                 Data.xp -= LevelRules.XpToNext(Data.level);
                 Data.level++;
                 gained++;
+                // Bilan en étoiles du niveau qui se termine (le premier, si plusieurs d'un coup).
+                int stars = gained == 1 ? LevelRules.Stars(Data.levelDelivered, Data.levelFast, Data.levelMissed) : 1;
+                int baseReward = LevelRules.LevelUpReward(Data.level);
                 var info = new LevelUpInfo
                 {
                     newLevel = Data.level,
-                    reward = LevelRules.LevelUpReward(Data.level),
+                    baseReward = baseReward,
+                    stars = stars,
+                    reward = (int)Math.Round(baseReward * LevelRules.StarFactor(stars)),
+                    turboSeconds = stars >= 3 ? LevelRules.ThreeStarTurboSeconds : 0,
+                    delivered = Data.levelDelivered,
+                    fast = Data.levelFast,
+                    missed = Data.levelMissed,
                     unlockedColor = LevelRules.ColorUnlockedAt(Data.level),
                     unlocks = LevelRules.UnlocksAt(Data.level),
                 };
+                Data.levelDelivered = Data.levelFast = Data.levelMissed = 0;
+                Data.pendingCards = Math.Min(5, Data.pendingCards + 1);
                 AddMoney(info.reward);
+                if (info.turboSeconds > 0)
+                    Data.turboEndUnix = Math.Max(Data.turboEndUnix, TurboClock) + info.turboSeconds;
                 LevelUp?.Invoke(info);
             }
             if (IsMaxLevel) Data.xp = 0;
@@ -834,6 +917,12 @@ namespace CraneBay.Core
             reward = default;
             if (ChestRemaining(kind, now) > 0) return false;
             reward = ChestLogic.Roll(kind, Progress, rng);
+            if (kind == ChestKind.Quotidien)
+            {
+                // Série de jours : à calculer AVANT de mettre à jour l'heure d'ouverture.
+                Data.dailyStreak = ChestLogic.NextStreak(Data.dailyStreak, Data.lastDailyChestUnix, now);
+                reward = ChestLogic.ApplyStreak(reward, ChestLogic.StreakDay(Data.dailyStreak));
+            }
             if (kind == ChestKind.Quotidien) Data.lastDailyChestUnix = now;
             else Data.lastQuickChestUnix = now;
             if (reward.money > 0) AddMoney(reward.money);
