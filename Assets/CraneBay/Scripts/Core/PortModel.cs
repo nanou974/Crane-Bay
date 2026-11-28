@@ -361,7 +361,7 @@ namespace CraneBay.Core
             res.ok = true;
             res.earned = gain;
             res.vehicle = v;
-            res.xp = LevelRules.XpFor(c.Color, train);
+            res.xp = LevelRules.XpFor(c.Color, train, PlayerLevel);
 
             if (v.AllFilled)
             {

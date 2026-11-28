@@ -9,7 +9,8 @@
 //    matières dangereuses (niv. 5) ;
 //  - navires plus chargés (+1 conteneur tous les 3 niveaux) ;
 //  - nouveau décor : port tropical (niv. 10), port polaire (niv. 20).
-// Le seuil d'XP grandit de 30 % à chaque niveau.
+// Le seuil d'XP grandit de 30 % à chaque niveau, et les gains d'XP des
+// livraisons sont multipliés par 1,1 à chaque niveau gagné (cumulé).
 // Sans dépendance Unity (testable hors moteur).
 // -----------------------------------------------------------------------------
 using System;
@@ -65,10 +66,20 @@ namespace CraneBay.Core
         public const double ReeferChance = 0.12;
         public const double HazardChance = 0.07;
 
-        public static int XpFor(ContainerColor c, bool train)
+        /// <summary>Gain d'XP supplémentaire par niveau gagné (cumulé : x1,1, x1,21...).</summary>
+        public const double XpGrowthPerLevel = 1.1;
+
+        /// <summary>Multiplicateur des gains d'XP au niveau "level" (x1 au niveau 1).</summary>
+        public static double XpMultiplier(int level) => Math.Pow(XpGrowthPerLevel, Math.Max(0, level - 1));
+
+        public static int XpFor(ContainerColor c, bool train) => XpFor(c, train, 1);
+
+        /// <summary>XP d'une livraison au niveau "level" (multiplicateur inclus, arrondi au-dessus).</summary>
+        public static int XpFor(ContainerColor c, bool train, int level)
         {
-            int xp = ColorXp[(int)c];
-            return train ? (int)Math.Ceiling(xp * GameRules.TrainBonus) : xp;
+            double xp = ColorXp[(int)c];
+            if (train) xp = Math.Ceiling(xp * GameRules.TrainBonus);
+            return (int)Math.Ceiling(xp * XpMultiplier(level) - 1e-9);
         }
 
         /// <summary>XP nécessaires pour passer du niveau "level" au suivant (0 au niveau max).</summary>
