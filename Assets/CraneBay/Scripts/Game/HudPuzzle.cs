@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // Crane Bay - Écran du mini-jeu de détente « Sortez le conteneur rouge ».
 //
-// Bouton « Détente » dans le bandeau (il clignote pendant l'attente du navire).
+// Gros bouton rond flottant « Détente » (il clignote pendant l'attente du navire).
 // Le port est mis en pause pendant le puzzle (voir GameManager.OpenPuzzle).
 // On fait glisser les conteneurs dans leur sens ; le rouge sort par la droite.
 // Les puzzles sont générés sur un fil séparé pour ne pas figer l'écran.
@@ -45,21 +45,47 @@ namespace CraneBay.Game
         // Construction
         // =====================================================================
 
-        void BuildRelaxButton(RectTransform strip, Vector2 pos)
+        const float RelaxSize = 150f;
+
+        /// <summary>
+        /// Gros bouton rond flottant, en bas à droite juste au-dessus des améliorations :
+        /// zone vide du terrain (sous la voie ferrée, à droite des wagons).
+        /// </summary>
+        void BuildRelaxButton()
         {
-            relaxButton = MakeButton(strip, "Detente", new Vector2(0, 0.5f), pos, new Vector2(96, 96), RelaxColor, out relaxImage);
+            relaxButton = MakeButton(safeRoot, "Detente", new Vector2(1, 0), new Vector2(-22, BottomBarHeight + 14),
+                new Vector2(RelaxSize, RelaxSize), RelaxColor, out relaxImage);
+            relaxImage.sprite = SpriteFactory.Circle;
+            relaxImage.type = Image.Type.Simple;
+            var rt = (RectTransform)relaxButton.transform;
+            // Ombre portée et liseré blanc pour bien détacher le bouton du décor.
+            var shadow = relaxImage.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0, 0, 0, 0.45f);
+            shadow.effectDistance = new Vector2(5, -7);
             var outline = relaxImage.gameObject.AddComponent<Outline>();
             outline.effectColor = Color.white;
-            outline.effectDistance = new Vector2(3, -3);
-            // Petit pictogramme : deux conteneurs, dont un rouge qui sort.
-            var a = NewRect("Bloc", (RectTransform)relaxButton.transform);
-            SetRect(a, new Vector2(0.5f, 0.5f), new Vector2(-6, 16), new Vector2(50, 22), true);
-            AddImage(a.gameObject, SpriteFactory.UiRounded, Palette.Of(ContainerColor.Rouge)).raycastTarget = false;
-            var b = NewRect("Bloc2", (RectTransform)relaxButton.transform);
-            SetRect(b, new Vector2(0.5f, 0.5f), new Vector2(-20, -8), new Vector2(22, 22), true);
-            AddImage(b.gameObject, SpriteFactory.UiRounded, Color.white).raycastTarget = false;
-            AddText((RectTransform)relaxButton.transform, "Texte", "Détente", 19, Color.white, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 0f), new Vector2(0, 4), new Vector2(96, 26), true);
+            outline.effectDistance = new Vector2(4, -4);
+
+            // Pictogramme : mini-plateau avec un conteneur rouge qui sort par la droite.
+            var board = NewRect("Plateau", rt);
+            SetRect(board, new Vector2(0.5f, 0.5f), new Vector2(-6, 14), new Vector2(76, 62), true);
+            board.pivot = new Vector2(0.5f, 0.5f);
+            AddImage(board.gameObject, SpriteFactory.UiRounded, new Color(0.08f, 0.25f, 0.3f, 0.85f)).raycastTarget = false;
+            var red = NewRect("Rouge", board);
+            SetRect(red, new Vector2(0.5f, 0.5f), new Vector2(8, 0), new Vector2(46, 18), true);
+            red.pivot = new Vector2(0.5f, 0.5f);
+            AddImage(red.gameObject, SpriteFactory.UiRounded, Palette.Of(ContainerColor.Rouge)).raycastTarget = false;
+            foreach (var bx in new[] { -26f, 20f })
+            {
+                var blk = NewRect("Bloc", board);
+                SetRect(blk, new Vector2(0.5f, 0.5f), new Vector2(bx, bx < 0 ? 14 : -18), new Vector2(16, 26), true);
+                blk.pivot = new Vector2(0.5f, 0.5f);
+                AddImage(blk.gameObject, SpriteFactory.UiRounded, Color.white).raycastTarget = false;
+            }
+            AddText(rt, "Fleche", "→", 34, Palette.UiGold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), new Vector2(46, 14), new Vector2(40, 40), true);
+            AddText(rt, "Texte", "Détente", 26, Color.white, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0f), new Vector2(0, 20), new Vector2(RelaxSize, 34), true);
             relaxButton.onClick.AddListener(() => game.OpenPuzzle());
         }
 
@@ -204,7 +230,7 @@ namespace CraneBay.Game
                 bool waiting = !game.Model.Data.shipDocked && !game.Paused;
                 float k = waiting ? 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f) : 0f;
                 relaxImage.color = Color.Lerp(RelaxColor, new Color(0.55f, 1f, 0.95f), k);
-                float s = 1f + 0.07f * k;
+                float s = 1f + 0.08f * k;
                 relaxButton.transform.localScale = new Vector3(s, s, 1f);
             }
             if (!PuzzleOpen) return;

@@ -103,6 +103,7 @@ namespace CraneBay.Game
             BuildTopBar();
             BuildStrip();
             BuildBottomBar();
+            BuildRelaxButton();
             BuildToast();
             BuildBanner();
             BuildPanel();
@@ -222,10 +223,8 @@ namespace CraneBay.Game
             }
             pause.onClick.AddListener(() => game.TogglePause());
 
-            BuildRelaxButton(strip, new Vector2(110, 0));
-
-            AddText(strip, "Titre", "À\nvenir", 22, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleCenter,
-                new Vector2(0, 0.5f), new Vector2(208, 0), new Vector2(70, 70));
+            AddText(strip, "Titre", "À venir", 26, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleLeft,
+                new Vector2(0, 0.5f), new Vector2(114, 0), new Vector2(110, 60));
             for (int i = 0; i < GameRules.UpcomingCount; i++)
             {
                 var g = NewRect("Vehicule" + i, strip);
@@ -287,15 +286,25 @@ namespace CraneBay.Game
             }
         }
 
+        // Bandeau de 1056 de large : Pause occupe 6..102, Contrats commence à 1056-282 = 774.
+        const float ToastWidth = 660f;
+        const float ToastOffsetX = (110f + 774f) * 0.5f - 528f;
+
         void BuildToast()
         {
+            // Messages courts posés sur le bandeau « À venir » (entre Pause et Contrats) :
+            // ils ne cachent plus les conteneurs du navire et ne bloquent jamais les touches.
             var rt = NewRect("Message", safeRoot);
-            SetRect(rt, new Vector2(0.5f, 1), new Vector2(0, -TopBarHeight - StripHeight - 20), new Vector2(1000, 130), true);
+            SetRect(rt, new Vector2(0.5f, 1), new Vector2(ToastOffsetX, -TopBarHeight - 6), new Vector2(ToastWidth, StripHeight), true);
             toastGroup = rt.gameObject.AddComponent<CanvasGroup>();
             toastGroup.blocksRaycasts = false;
             toastGroup.interactable = false;
-            AddImage(rt.gameObject, SpriteFactory.UiRounded, new Color(0.12f, 0.14f, 0.2f, 0.85f)).raycastTarget = false;
-            toastText = AddText(rt, "Texte", "", 36, Palette.UiText, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(980, 126), true);
+            AddImage(rt.gameObject, SpriteFactory.UiRounded, new Color(0.1f, 0.12f, 0.18f, 0.97f)).raycastTarget = false;
+            toastText = AddText(rt, "Texte", "", 30, Palette.UiText, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(ToastWidth - 20, StripHeight - 6), true);
+            toastText.resizeTextForBestFit = true;
+            toastText.resizeTextMinSize = 18;
+            toastText.resizeTextMaxSize = 30;
+            toastText.verticalOverflow = VerticalWrapMode.Truncate;
             toastGroup.alpha = 0f;
         }
 
@@ -502,7 +511,7 @@ namespace CraneBay.Game
         void DisplayToast(string message)
         {
             toastText.text = message;
-            toastTimer = 2.2f;
+            toastTimer = 2.6f;
             toastGroup.alpha = 1f;
         }
 
