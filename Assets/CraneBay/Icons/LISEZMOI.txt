@@ -1,0 +1,12 @@
+Icône de l'appli Crane Bay (piste « conteneur soulevé »).
+
+Ces PNG sont générés depuis Tools/icon/background.svg et foreground.svg :
+  node Tools/icon/export-icons.js Tools/icon Assets/CraneBay/Icons
+
+- icon_adaptive_background.png / icon_adaptive_foreground.png : 432x432,
+  icône adaptative Android 8+ (le lanceur découpe la forme ; garder l'essentiel
+  du premier plan dans le cercle central de 66/108).
+- icon_round.png / icon_legacy.png : 512x512, anciens Android.
+
+Ils sont posés dans les Player Settings par Editor/ProjectSetup.cs (ApplyIcons),
+à chaque « Crane Bay > Configurer le projet » et à chaque build.

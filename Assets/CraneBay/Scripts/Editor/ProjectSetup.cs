@@ -7,7 +7,9 @@
 //  - l'ajoute aux scènes du build ;
 //  - règle les paramètres Android : orientation PORTRAIT, identifiant du
 //    paquet, IL2CPP + ARM64, espace colorimétrique Gamma (moins coûteux),
-//    ancien Input Manager (utilisé par les contrôles tactiles).
+//    ancien Input Manager (utilisé par les contrôles tactiles) ;
+//  - pose l'icône de l'appli (Assets/CraneBay/Icons) : icône adaptative
+//    Android 8+ (fond + premier plan), icône ronde et icône classique.
 // Les réglages sont faits par code plutôt que dans des fichiers
 // ProjectSettings écrits à la main : c'est plus robuste d'une version de Unity
 // à l'autre.
@@ -15,6 +17,7 @@
 using System.IO;
 using CraneBay.Game;
 using UnityEditor;
+using UnityEditor.Android;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -81,6 +84,76 @@ namespace CraneBay.EditorTools
             EditorUserBuildSettings.buildAppBundle = false;
 
             ForceLegacyInputManager();
+            ApplyIcons();
+        }
+
+        // ---------------------------------------------------------------------
+        // Icône de l'appli
+        // ---------------------------------------------------------------------
+
+        const string IconFolder = "Assets/CraneBay/Icons/";
+
+        /// <summary>
+        /// Remplace l'icône Unity par celle de Crane Bay. Les PNG sont générés
+        /// depuis des SVG (voir Assets/CraneBay/Icons/LISEZMOI.txt) :
+        ///  - adaptative (Android 8+) : fond + premier plan 432x432, le lanceur
+        ///    découpe la forme (rond, carré arrondi...) ;
+        ///  - ronde et classique (anciens Android) : image complète 512x512.
+        /// </summary>
+        static void ApplyIcons()
+        {
+            var background = LoadIcon("icon_adaptive_background.png");
+            var foreground = LoadIcon("icon_adaptive_foreground.png");
+            var legacy = LoadIcon("icon_legacy.png");
+            var round = LoadIcon("icon_round.png");
+            if (background == null || foreground == null || legacy == null || round == null)
+            {
+                Debug.LogWarning("[CraneBay] Icônes introuvables dans " + IconFolder + " : icône Unity conservée.");
+                return;
+            }
+
+            // Icône par défaut (toutes plateformes).
+            PlayerSettings.SetIconsForTargetGroup(BuildTargetGroup.Unknown, new[] { legacy });
+
+            var android = NamedBuildTarget.Android;
+            SetAndroidIcons(android, AndroidPlatformIconKind.Adaptive, background, foreground);
+            SetAndroidIcons(android, AndroidPlatformIconKind.Round, round);
+            SetAndroidIcons(android, AndroidPlatformIconKind.Legacy, legacy);
+        }
+
+        /// <summary>Même(s) texture(s) pour toutes les densités : Unity redimensionne.</summary>
+        static void SetAndroidIcons(NamedBuildTarget target, PlatformIconKind kind, params Texture2D[] layers)
+        {
+            var icons = PlayerSettings.GetPlatformIcons(target, kind);
+            foreach (var icon in icons) icon.SetTextures(layers);
+            PlayerSettings.SetPlatformIcons(target, kind, icons);
+        }
+
+        /// <summary>Charge un PNG d'icône en le réglant sans compression ni mipmaps.</summary>
+        static Texture2D LoadIcon(string file)
+        {
+            string path = IconFolder + file;
+            if (!File.Exists(path)) return null;
+            AssetDatabase.ImportAsset(path);
+            if (AssetImporter.GetAtPath(path) is TextureImporter importer)
+            {
+                bool changed = importer.textureType != TextureImporterType.Default
+                    || importer.mipmapEnabled
+                    || importer.textureCompression != TextureImporterCompression.Uncompressed
+                    || importer.npotScale != TextureImporterNPOTScale.None
+                    || !importer.alphaIsTransparency;
+                if (changed)
+                {
+                    importer.textureType = TextureImporterType.Default;
+                    importer.mipmapEnabled = false;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.npotScale = TextureImporterNPOTScale.None;
+                    importer.alphaIsTransparency = true;
+                    importer.maxTextureSize = 1024;
+                    importer.SaveAndReimport();
+                }
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         /// <summary>

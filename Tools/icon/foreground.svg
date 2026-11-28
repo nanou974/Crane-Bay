@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g transform="translate(262 270) scale(.86) translate(-262 -270)">
+<g stroke="#1F2433" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+ <!-- câbles -->
+ <path d="M204 200 L236 -40 M314 186 L290 -40" fill="none" stroke-width="6"/>
+ <!-- palonnier orange -->
+ <path d="M118 228 L392 192 L410 206 L136 244 Z" fill="#FF8A1F"/>
+ <path d="M118 228 L136 244 L136 258 L118 242 Z" fill="#C95F10"/>
+ <rect x="186" y="186" width="36" height="34" rx="5" fill="#FFB627" transform="rotate(-7 204 203)"/>
+ <rect x="296" y="172" width="36" height="34" rx="5" fill="#FFB627" transform="rotate(-7 314 189)"/>
+ <path d="M112 226 L100 196 L128 222 Z M396 190 L398 158 L412 196 Z" fill="#E8333F"/>
+ <!-- conteneur : flanc, bout, dessous -->
+ <path d="M124 252 L386 218 L386 330 L124 356 Z" fill="#2F7FD6"/>
+ <path d="M386 218 L420 238 L420 344 L386 330 Z" fill="#1E5FAE"/>
+ <path d="M124 356 L386 330 L420 344 L160 374 Z" fill="#163E73"/>
+</g>
+<g fill="none" stroke="#1D5BA8" stroke-width="7" stroke-linecap="round">
+ <path d="M150 256 V344 M176 253 V342 M202 250 V339 M228 246 V337 M254 243 V334 M280 239 V332 M306 236 V329 M332 232 V327 M358 229 V324"/>
+</g>
+<g fill="none" stroke="#2F7FD6" stroke-width="5" stroke-linecap="round"><path d="M395 232 V332 M404 237 V336 M412 242 V339"/></g>
+<path d="M124 252 L386 218 L386 330 L124 356 Z M386 218 L420 238 L420 344 L386 330 M386 330 L420 344 L160 374 L124 356" fill="none" stroke="#1F2433" stroke-width="8" stroke-linejoin="round"/>
+<path d="M124 252 L386 218 L386 226 L124 260 Z" fill="#7FC0FF" opacity=".55"/>
+</g></svg>
