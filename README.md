@@ -1,4 +1,6 @@
-# Crane Bay
+<p align="center"><img src="Assets/CraneBay/Icons/icon_round.png" alt="Logo Crane Bay" width="160"></p>
+
+<h1 align="center">Crane Bay</h1>
 
 Jeu mobile Android de gestion de terminal à conteneurs, vu de dessus. Développé avec Unity (C#).
 Gratuit, sans publicité ni achat intégré, distribué en APK hors store.
