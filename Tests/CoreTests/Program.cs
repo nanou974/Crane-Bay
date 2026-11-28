@@ -227,6 +227,12 @@ static class Program
         for (int l = 1; l < LevelRules.MaxLevel - 1; l++)
             Check(LevelRules.XpToNext(l + 1) > LevelRules.XpToNext(l), $"seuil d'XP croissant {l}");
         Check(LevelRules.XpFor(ContainerColor.Dore, true) > LevelRules.XpFor(ContainerColor.Dore, false), "bonus XP du train");
+        Check(Math.Abs(LevelRules.XpMultiplier(1) - 1) < 1e-9 && Math.Abs(LevelRules.XpMultiplier(2) - 1.1) < 1e-9
+              && Math.Abs(LevelRules.XpMultiplier(3) - 1.21) < 1e-9, "multiplicateur d'XP x1,1 par niveau gagné (cumulé)");
+        Check(LevelRules.XpFor(ContainerColor.Blanc, false, 1) == 1 && LevelRules.XpFor(ContainerColor.Dore, false, 1) == 12, "XP de base au niveau 1");
+        Check(LevelRules.XpFor(ContainerColor.Dore, false, 16) == (int)Math.Ceiling(12 * Math.Pow(1.1, 15)), "XP multipliée au niveau 16");
+        for (int lv = 2; lv < LevelRules.MaxLevel; lv++)
+            Check(LevelRules.XpFor(ContainerColor.Bleu, false, lv) >= LevelRules.XpFor(ContainerColor.Bleu, false, lv - 1), "XP croissante avec le niveau " + lv);
 
         var ups = new List<LevelUpInfo>();
         m.LevelUp += ups.Add;

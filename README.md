@@ -30,7 +30,7 @@ enfoui, il faut d'abord déplacer ceux qui sont au-dessus. Un véhicule qui atte
 patience) repart à vide.
 
 **Niveaux :** chaque conteneur livré rapporte des XP (1 à 12 selon la couleur, +50 % en train). Quand la
-barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis à chaque niveau) :
+barre d'XP est pleine, on passe au niveau suivant (30 niveaux, +30 % d'XP requis à chaque niveau, mais chaque niveau gagné multiplie aussi les gains d'XP des livraisons par 1,1, cumulé : x1,5 au niveau 5, x4,2 au niveau 16 ; le multiplicateur s'affiche sur la barre d'XP) :
 - le niveau n'est validé qu'une fois **tous les camions et trains présents servis** (ou partis) : la barre
   affiche « Niveau prêt ! » et aucun nouveau véhicule n'arrive en attendant ;
 - prime en argent (50 $ × le nouveau niveau) ;

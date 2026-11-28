@@ -566,6 +566,14 @@ namespace CraneBay.Game
         }
 
         /// <summary>Rafraîchit les textes (appelé quelques fois par seconde, pas à chaque image).</summary>
+        /// <summary>« · XP x1,5 » à partir du niveau 2 (multiplicateur d'XP par niveau gagné).</summary>
+        static string XpBonusLabel(int level)
+        {
+            if (level <= 1) return "";
+            double k = LevelRules.XpMultiplier(level);
+            return "  · x" + k.ToString(k < 10 ? "0.0" : "0", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"));
+        }
+
         public void Refresh(double now)
         {
             var m = game.Model;
@@ -573,7 +581,7 @@ namespace CraneBay.Game
                             + "   •   " + Ambience.WeatherNames[(int)Ambience.WeatherAt(now)];
             levelText.text = "Niv. " + m.PlayerLevel;
             xpFill.anchorMax = new Vector2(m.XpRatio, 1f);
-            xpText.text = m.IsMaxLevel ? "MAX" : m.LevelUpPending ? "Niveau prêt !" : m.Data.xp + " / " + LevelRules.XpToNext(m.PlayerLevel) + " XP";
+            xpText.text = m.IsMaxLevel ? "MAX" : m.LevelUpPending ? "Niveau prêt !" : m.Data.xp + " / " + LevelRules.XpToNext(m.PlayerLevel) + " XP" + XpBonusLabel(m.PlayerLevel);
             turboText.text = m.TurboActive(now) ? "TURBO GRUE x2  " + ChestLogic.Format(m.Data.turboEndUnix - now) : "";
 
             for (int i = 0; i < 2; i++)
