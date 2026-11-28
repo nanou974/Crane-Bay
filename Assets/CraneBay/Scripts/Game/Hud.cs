@@ -131,6 +131,9 @@ namespace CraneBay.Game
                 new Vector2(0.5f, 1), new Vector2(CenterOffset, -110), new Vector2(CenterWidth, 50), true);
             turboText = AddText(bar, "Turbo", "", 28, new Color(1f, 0.55f, 0.2f), TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 1), new Vector2(CenterOffset, -170), new Vector2(CenterWidth, 44), true);
+            // Une seule ligne, réduite si besoin : le texte ne déborde plus sur le niveau.
+            SingleLine(infoText, 18);
+            SingleLine(turboText, 18);
 
             // Droite : les deux coffres.
             chests[(int)ChestKind.Quotidien] = BuildChest(bar, "Coffre\ndu jour", new Vector2(-20 - ChestWidth - 12, -20), ChestKind.Quotidien);
@@ -149,8 +152,10 @@ namespace CraneBay.Game
         void BuildXpRow(RectTransform bar)
         {
             float left = CenterOffset - CenterWidth * 0.5f;
-            levelText = AddText(bar, "Niveau", "Niv. 1", 40, Palette.UiText, TextAnchor.MiddleLeft,
+            levelText = AddText(bar, "Niveau", "Niv. 1", 36, Palette.UiText, TextAnchor.MiddleLeft,
                 new Vector2(0.5f, 1), new Vector2(left + 60f, -46), new Vector2(120, 56), true);
+            // Toujours sur une seule ligne ("Niv. 12" ne doit jamais passer à la ligne).
+            SingleLine(levelText, 24);
             var back = NewRect("BarreXP", bar);
             SetRect(back, new Vector2(0.5f, 1), new Vector2(left + 125f + (CenterWidth - 125f) * 0.5f, -52), new Vector2(CenterWidth - 125f, 44), true);
             AddImage(back.gameObject, SpriteFactory.UiRounded, new Color(0.05f, 0.06f, 0.1f, 1f)).raycastTarget = false;
@@ -605,6 +610,19 @@ namespace CraneBay.Game
             img.type = Image.Type.Sliced;
             img.color = color;
             return img;
+        }
+
+        /// <summary>Texte sur une seule ligne : la police rétrécit (jusqu'à minSize) au lieu de passer à la ligne.</summary>
+        static void SingleLine(Text t, int minSize)
+        {
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+            t.resizeTextForBestFit = true;
+            t.resizeTextMinSize = minSize;
+            t.resizeTextMaxSize = t.fontSize;
+            var rt = t.rectTransform;
+            // Hauteur d'une seule ligne : un retour à la ligne ne tient plus, la taille baisse donc.
+            rt.sizeDelta = new Vector2(rt.sizeDelta.x, t.fontSize * 1.25f);
         }
 
         static Text AddText(RectTransform parent, string name, string text, int size, Color color, TextAnchor align,
