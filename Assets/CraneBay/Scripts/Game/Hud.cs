@@ -19,7 +19,7 @@ using UnityEngine.UI;
 
 namespace CraneBay.Game
 {
-    public class Hud : MonoBehaviour
+    public partial class Hud : MonoBehaviour
     {
         public const float TopBarHeight = 250f;
         public const float StripHeight = 84f;
@@ -108,6 +108,7 @@ namespace CraneBay.Game
             BuildPanel();
             BuildCardPanel();
             BuildPauseOverlay();
+            BuildPuzzle();
         }
 
         void BuildTopBar()
@@ -221,8 +222,10 @@ namespace CraneBay.Game
             }
             pause.onClick.AddListener(() => game.TogglePause());
 
-            AddText(strip, "Titre", "À venir", 26, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleLeft,
-                new Vector2(0, 0.5f), new Vector2(114, 0), new Vector2(110, 60));
+            BuildRelaxButton(strip, new Vector2(110, 0));
+
+            AddText(strip, "Titre", "À\nvenir", 22, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleCenter,
+                new Vector2(0, 0.5f), new Vector2(208, 0), new Vector2(70, 70));
             for (int i = 0; i < GameRules.UpcomingCount; i++)
             {
                 var g = NewRect("Vehicule" + i, strip);
@@ -421,6 +424,7 @@ namespace CraneBay.Game
 
         public void SetPaused(bool paused)
         {
+            if (PuzzleOpen) return; // le mini-jeu a son propre écran
             if (paused) ClosePanel();
             pauseOverlay.SetActive(paused);
             pauseOverlay.transform.SetAsLastSibling();
@@ -531,11 +535,12 @@ namespace CraneBay.Game
         {
             if (game == null) return;
             ApplySafeArea();
+            UpdatePuzzle();
 
             // Compteur d'argent animé (monte progressivement vers la vraie valeur).
             double target = game.Model.Data.money;
             if (Math.Abs(shownMoney - target) < 1) shownMoney = target;
-            else shownMoney += (target - shownMoney) * Mathf.Clamp01(Time.deltaTime * 10f);
+            else shownMoney += (target - shownMoney) * Mathf.Clamp01(Time.unscaledDeltaTime * 10f);
             moneyText.text = FormatMoney((long)Math.Round(shownMoney));
 
             if (toastTimer > 0f)

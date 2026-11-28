@@ -216,6 +216,47 @@ namespace CraneBay.Game
             audioManager.Play(Sfx.Select);
         }
 
+        // =====================================================================
+        // Mini-jeu de détente (le port est en pause pendant le puzzle)
+        // =====================================================================
+
+        public void OpenPuzzle()
+        {
+            if (hud.PuzzleOpen) return;
+            if (!Paused)
+            {
+                Paused = true;
+                Time.timeScale = 0f;
+                ClearSelection();
+                EndDragGhost();
+            }
+            else hud.SetPaused(false); // masque l'écran de pause, la pause continue
+            hud.ShowPuzzle();
+            audioManager.Play(Sfx.Select);
+        }
+
+        public void ClosePuzzle()
+        {
+            if (!hud.PuzzleOpen) return;
+            hud.HidePuzzle();
+            Paused = false;
+            Time.timeScale = 1f;
+            hud.SetPaused(false);
+            audioManager.Play(Sfx.Select);
+            SaveNow();
+        }
+
+        /// <summary>Puzzle résolu : prime, son, sauvegarde. Renvoie la prime.</summary>
+        public long CompletePuzzle(bool perfect)
+        {
+            long reward = Model.CompletePuzzle(perfect);
+            audioManager.Play(perfect ? Sfx.Fanfare : Sfx.Coin);
+            SaveNow();
+            return reward;
+        }
+
+        public void PlayUi(Sfx sfx) => audioManager.Play(sfx, 0.7f);
+
         void EndDragGhost()
         {
             if (dragGhost != null) { Destroy(dragGhost.gameObject); dragGhost = null; }
@@ -232,7 +273,11 @@ namespace CraneBay.Game
                 Model.ShiftTimers(Time.unscaledDeltaTime);
                 hudTimer -= Time.unscaledDeltaTime;
                 if (hudTimer <= 0f) { hudTimer = HudRefreshInterval; hud.Refresh(now); }
-                if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    if (hud.PuzzleOpen) ClosePuzzle();
+                    else TogglePause();
+                }
                 return;
             }
 

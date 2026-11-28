@@ -30,6 +30,7 @@ static class Program
         AmbienceThemesRecords();
         LevelUpWaitsForVehicles();
         ArrivingVehicleTarget();
+        Puzzle();
         Music();
         PauseAndIncome();
         StarsAndStreak();
@@ -355,6 +356,79 @@ static class Program
         Check(!m.CanDropAt(to, other, from, allowArriving: true), "mauvaise couleur refusée même en approche");
         m.MarkArrived(v, now + 2.2);
         Check(m.CanDropAt(to, c, from), "dépôt possible une fois à quai");
+    }
+
+    /// <summary>Mini-jeu « sortez le conteneur rouge » : puzzles résolubles, déterministes, progressifs.</summary>
+    static void Puzzle()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int prevMin = 0, harder = 0;
+        long slowest = 0;
+        for (int i = 0; i < 40; i++)
+        {
+            long t0 = sw.ElapsedMilliseconds;
+            var p = SlidePuzzle.Generate(i);
+            slowest = Math.Max(slowest, sw.ElapsedMilliseconds - t0);
+            Check(p.pieces.Count >= 4 && !p.IsSolved, "puzzle " + i + " : plateau valide, pas déjà résolu");
+            Check(p.Solve() == p.MinMoves, "puzzle " + i + " : coups minimaux exacts (" + p.MinMoves + ")");
+            Check(p.MinMoves >= Math.Min(3, SlidePuzzle.TargetMoves(i)), "puzzle " + i + " : pas trivial");
+            // Pas de chevauchement, tout dans la grille.
+            var cells = new bool[36]; bool ok = true;
+            for (int k = 0; k < p.pieces.Count; k++)
+                for (int c = 0; c < p.pieces[k].len; c++)
+                {
+                    int x = p.Col(k) + (p.pieces[k].horizontal ? c : 0), y = p.Row(k) + (p.pieces[k].horizontal ? 0 : c);
+                    if (x < 0 || y < 0 || x >= 6 || y >= 6 || cells[y * 6 + x]) ok = false; else cells[y * 6 + x] = true;
+                }
+            Check(ok, "puzzle " + i + " : conteneurs sans chevauchement");
+            var again = SlidePuzzle.Generate(i);
+            Check(string.Join(",", again.offsets) == string.Join(",", p.offsets) && again.MinMoves == p.MinMoves, "puzzle " + i + " : déterministe");
+            if (p.MinMoves >= prevMin) harder++;
+            prevMin = p.MinMoves;
+        }
+        Check(harder >= 25, "difficulté globalement croissante");
+        Check(slowest < 1500, "génération rapide (" + slowest + " ms max)");
+        Console.WriteLine("  Puzzles : génération la plus lente " + slowest + " ms, n°0 = " + SlidePuzzle.Generate(0).MinMoves
+            + " coups, n°10 = " + SlidePuzzle.Generate(10).MinMoves + ", n°30 = " + SlidePuzzle.Generate(30).MinMoves);
+
+        // Jouer : suivre une solution optimale coup par coup jusqu'à la sortie.
+        var q = SlidePuzzle.Generate(3);
+        int guard = 0;
+        while (!q.IsSolved && guard++ < 100)
+        {
+            int cur = q.Solve();
+            bool moved = false;
+            for (int k = 0; k < q.pieces.Count && !moved; k++)
+            {
+                q.Range(k, out int lo, out int hi);
+                for (int to = lo; to <= hi && !moved; to++)
+                {
+                    if (to == q.offsets[k]) continue;
+                    int back = q.offsets[k];
+                    q.offsets[k] = to;
+                    bool good = q.Solve() == cur - 1;
+                    q.offsets[k] = back;
+                    if (good) moved = q.Move(k, to);
+                }
+            }
+            if (!moved) break;
+        }
+        Check(q.IsSolved && q.Moves == q.MinMoves, "solution optimale jouable jusqu'à la sortie");
+        Check(!q.Move(1, 0), "plus de coup après la sortie");
+        q.Restart();
+        Check(q.Moves == 0 && !q.IsSolved, "recommencer remet le plateau de départ");
+        q.Range(0, out int a, out int b);
+        Check(!q.Move(0, b + 1), "un conteneur ne traverse pas les autres");
+
+        // Récompense et progression sauvegardée.
+        var m = new PortModel(null, 1_700_000_000);
+        long before = m.Data.money;
+        long r1 = m.CompletePuzzle(false), r2 = m.CompletePuzzle(true);
+        Check(r1 == PuzzleRules.Reward(1, false) && r2 == 2 * r1 && m.Data.money == before + r1 + r2, "prime du puzzle (x2 si parfait)");
+        Check(m.Data.puzzlesSolved == 2 && m.Data.puzzlesPerfect == 1, "progression des puzzles");
+        var d = new SaveData { puzzlesSolved = -3, puzzlesPerfect = 9 };
+        d.Sanitize(1_700_000_000);
+        Check(d.puzzlesSolved == 0 && d.puzzlesPerfect == 0, "sauvegarde des puzzles assainie");
     }
 
     /// <summary>Musique : boucle déterministe, sans saturation, avec un raccord sans claquement.</summary>

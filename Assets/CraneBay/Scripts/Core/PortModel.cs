@@ -692,6 +692,16 @@ namespace CraneBay.Core
         }
 
         /// <summary>Applique la carte choisie. Renvoie false s'il n'y a pas de carte à choisir.</summary>
+        /// <summary>Puzzle de détente résolu : prime (x2 si parfait), puzzle suivant. Renvoie la prime.</summary>
+        public long CompletePuzzle(bool perfect)
+        {
+            long reward = PuzzleRules.Reward(PlayerLevel, perfect);
+            Data.puzzlesSolved++;
+            if (perfect) Data.puzzlesPerfect++;
+            AddMoney(reward);
+            return reward;
+        }
+
         public bool ChooseCard(LevelCard card, double now)
         {
             if (!HasPendingCard) return false;
