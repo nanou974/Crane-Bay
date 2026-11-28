@@ -64,6 +64,10 @@ namespace CraneBay.Core
         // Cartes de fin de niveau encore à choisir (une par niveau franchi).
         public int pendingCards;
 
+        // Mini-jeu de détente « sortez le conteneur rouge ».
+        public int puzzlesSolved;             // numéro du prochain puzzle
+        public int puzzlesPerfect;            // résolus en un minimum de coups
+
         public static SaveData NewGame(double nowUnix)
         {
             return new SaveData
@@ -86,6 +90,8 @@ namespace CraneBay.Core
             levelMissed = Math.Max(0, levelMissed);
             dailyStreak = Math.Max(0, dailyStreak);
             pendingCards = Math.Max(0, Math.Min(5, pendingCards));
+            puzzlesSolved = Math.Max(0, puzzlesSolved);
+            puzzlesPerfect = Math.Max(0, Math.Min(puzzlesSolved, puzzlesPerfect));
             int n = GameRules.UpgradeCount;
             if (upgrades == null || upgrades.Length != n)
             {

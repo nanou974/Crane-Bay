@@ -68,6 +68,11 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
   deux piles voisines.
 
 **Autres mécaniques :**
+- *Mini-jeu « Détente »* : le bouton Détente (à côté de Pause, il clignote pendant l'attente du navire)
+  ouvre un puzzle : un petit parc de 6 x 6 cases où l'on fait glisser les conteneurs dans leur sens pour
+  sortir le conteneur rouge par la droite. Le port est en pause pendant le puzzle. Les puzzles sont générés
+  et vérifiés par un solveur (toujours résolubles, difficulté progressive) ; chacun rapporte 25 $ x niveau,
+  doublés si on le résout en un minimum de coups (`Core/SlidePuzzle.cs`).
 - *Véhicule annoncé* : dès qu'un camion ou un train apparaît, son emplacement d'arrêt clignote au quai
   avec les couleurs demandées. On peut déjà le viser : la grue prend le conteneur, se place au-dessus
   et dépose dès que le véhicule est à quai (l'ordre n'est plus perdu).
