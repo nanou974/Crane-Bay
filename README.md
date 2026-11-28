@@ -68,7 +68,7 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
   deux piles voisines.
 
 **Autres mécaniques :**
-- *Mini-jeu « Détente »* : le bouton Détente (à côté de Pause, il clignote pendant l'attente du navire)
+- *Mini-jeu « Détente »* : le gros bouton rond flottant Détente (en bas à droite, il clignote pendant l'attente du navire)
   ouvre un puzzle : un petit parc de 6 x 6 cases où l'on fait glisser les conteneurs dans leur sens pour
   sortir le conteneur rouge par la droite. Le port est en pause pendant le puzzle. Les puzzles sont générés
   et vérifiés par un solveur (toujours résolubles, difficulté progressive) ; chacun rapporte 25 $ x niveau,
