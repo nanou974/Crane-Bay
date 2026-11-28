@@ -129,6 +129,22 @@ Unity -batchmode -quit -projectPath /chemin/vers/crane-bay -buildTarget Android 
 
 Le code de sortie vaut 0 si le build réussit, 1 sinon (le détail est dans `build.log`).
 
+Ajouter `-appVersion 0.1.2` pour fixer la version de l'application (et un *versionCode* croissant,
+ici 102, pour qu'Android installe l'APK comme une mise à jour).
+
+### Sous Windows, en une commande
+
+`Tools/build-apk.ps1` met le dépôt à jour depuis `main`, lance Unity en mode batch (sans ouvrir l'éditeur)
+et copie le résultat en `Builds/Android/CraneBay_v<version>.apk` :
+
+```powershell
+E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2            # APK seulement
+E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2 -Release   # + préversion GitHub (gh auth login requis)
+```
+
+Le dossier utilisé par le script ne doit pas être ouvert dans l'éditeur Unity pendant le build :
+utiliser un clone dédié, distinct du dossier de travail.
+
 ### Installer sur le téléphone
 
 - **Par câble :** activer le *débogage USB* (Options pour les développeurs), puis

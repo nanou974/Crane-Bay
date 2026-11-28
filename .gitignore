@@ -25,3 +25,4 @@
 # Tests .NET
 Tests/**/bin/
 Tests/**/obj/
+build.log
