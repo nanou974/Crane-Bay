@@ -59,7 +59,7 @@ namespace CraneBay.Game
         float bannerTimer;
         const float BannerDuration = 3.2f;
 
-        static readonly string[] UpgradeShortNames = { "Grue", "Navires", "Camions", "Parc", "2e grue" };
+        static readonly string[] UpgradeShortNames = { "Grue", "Navires", "Camions", "Parc", "2e grue", "Revenus" };
 
         public void Init(GameManager gm)
         {
@@ -105,6 +105,7 @@ namespace CraneBay.Game
             BuildToast();
             BuildBanner();
             BuildPanel();
+            BuildPauseOverlay();
         }
 
         void BuildTopBar()
@@ -195,8 +196,18 @@ namespace CraneBay.Game
             strip.anchoredPosition = new Vector2(0, -TopBarHeight - 6);
             AddImage(strip.gameObject, SpriteFactory.UiRounded, new Color(0.12f, 0.14f, 0.2f, 0.78f));
 
+            // Bouton pause (deux barres verticales dessinées), à gauche du bandeau.
+            var pause = MakeButton(strip, "Pause", new Vector2(0, 0.5f), new Vector2(8, 0), new Vector2(70, 66), Palette.UiButton, out _);
+            foreach (var bx in new[] { -10f, 10f })
+            {
+                var barRt = NewRect("Barre", (RectTransform)pause.transform);
+                SetRect(barRt, new Vector2(0.5f, 0.5f), new Vector2(bx, 0), new Vector2(12, 34), true);
+                AddImage(barRt.gameObject, SpriteFactory.UiRounded, Palette.UiText).raycastTarget = false;
+            }
+            pause.onClick.AddListener(() => game.TogglePause());
+
             AddText(strip, "Titre", "À venir", 26, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleLeft,
-                new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(110, 60));
+                new Vector2(0, 0.5f), new Vector2(90, 0), new Vector2(110, 60));
             for (int i = 0; i < GameRules.UpcomingCount; i++)
             {
                 var g = NewRect("Vehicule" + i, strip);
@@ -241,7 +252,7 @@ namespace CraneBay.Game
             AddText(bar, "TitreAmeliorations", "AMÉLIORATIONS", 26, new Color(1, 1, 1, 0.7f), TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 1), new Vector2(0, -6), new Vector2(600, 40), true);
 
-            float w = 200f, gap = 12f;
+            float w = 166f, gap = 10f;
             for (int i = 0; i < GameRules.UpgradeCount; i++)
             {
                 var type = (UpgradeType)i;
@@ -282,6 +293,43 @@ namespace CraneBay.Game
             o.effectDistance = new Vector2(5, -5);
             bannerSub = AddText(banner, "SousTitre", "", 40, Palette.UiText, TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -170), new Vector2(980, 190), true);
             bannerGroup.alpha = 0f;
+        }
+
+        GameObject pauseOverlay;
+
+        /// <summary>Écran de pause : fond sombre (bloque le jeu), "PAUSE", Reprendre / Quitter.</summary>
+        void BuildPauseOverlay()
+        {
+            pauseOverlay = new GameObject("Pause", typeof(RectTransform));
+            var root = (RectTransform)pauseOverlay.transform;
+            root.SetParent(safeRoot, false);
+            Stretch(root);
+            var dim = AddImage(root.gameObject, SpriteFactory.UiRounded, new Color(0, 0, 0, 0.55f));
+            dim.type = Image.Type.Simple;
+
+            AddText(root, "Titre", "PAUSE", 130, Palette.UiGold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), new Vector2(0, 260), new Vector2(900, 170), true).GetComponent<Outline>().effectDistance = new Vector2(5, -5);
+
+            var resume = MakeButton(root, "Reprendre", new Vector2(0.5f, 0.5f), new Vector2(0, 40), new Vector2(520, 130), Palette.UiGreen, out _);
+            ((RectTransform)resume.transform).pivot = new Vector2(0.5f, 0.5f);
+            AddText((RectTransform)resume.transform, "Texte", "Reprendre", 52, Color.white, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520, 130), true);
+            resume.onClick.AddListener(() => game.TogglePause());
+
+            var quit = MakeButton(root, "Quitter", new Vector2(0.5f, 0.5f), new Vector2(0, -130), new Vector2(520, 110), Palette.UiButton, out _);
+            ((RectTransform)quit.transform).pivot = new Vector2(0.5f, 0.5f);
+            AddText((RectTransform)quit.transform, "Texte", "Sauvegarder et quitter", 38, Palette.UiText, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520, 110), true);
+            quit.onClick.AddListener(() => game.QuitGame());
+
+            pauseOverlay.SetActive(false);
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (paused) ClosePanel();
+            pauseOverlay.SetActive(paused);
+            pauseOverlay.transform.SetAsLastSibling();
         }
 
         void BuildPanel()

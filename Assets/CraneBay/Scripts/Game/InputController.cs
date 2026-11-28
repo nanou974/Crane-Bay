@@ -37,7 +37,7 @@ namespace CraneBay.Game
 
         void Update()
         {
-            if (game == null) return;
+            if (game == null || game.Paused) return;
             if (!ReadPointer(out var screen, out bool down, out bool up, out int pointerId)) return;
 
             if (down)

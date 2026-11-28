@@ -127,7 +127,7 @@ namespace CraneBay.Game
             Model.VehicleLeaving += OnVehicleLeaving;
             Model.LevelUp += OnLevelUp;
             Model.TerminalReset += OnTerminalReset;
-            Model.ContractCompleted += c => Feedback(Sfx.Coin, "Contrat rempli : " + c.Describe() + "\n+" + Hud.FormatMoney(c.rewardMoney) + "  +" + c.rewardXp + " XP");
+            Model.ContractCompleted += c => Feedback(Sfx.Coin, "Contrat rempli : " + c.Describe() + "\n+" + Hud.FormatMoney((long)System.Math.Round(c.rewardMoney * GameRules.IncomeMultiplier(Model.Level(UpgradeType.Revenus)))) + "  +" + c.rewardXp + " XP");
             Model.RecordBroken += msg => Feedback(Sfx.Upgrade, msg);
 
             // État chargé : parc et, éventuellement, navire déjà à quai.
@@ -195,11 +195,46 @@ namespace CraneBay.Game
         // Boucle principale
         // =====================================================================
 
+        // =====================================================================
+        // Pause
+        // =====================================================================
+
+        public bool Paused { get; private set; }
+
+        /// <summary>
+        /// Met le jeu en pause ou le relance. Pendant la pause, les animations
+        /// sont figées (timeScale = 0) et les échéances du modèle (navire,
+        /// patience des véhicules, turbo) sont décalées à chaque image, pour
+        /// reprendre exactement où on en était. Les coffres continuent à se recharger.
+        /// </summary>
+        public void TogglePause()
+        {
+            Paused = !Paused;
+            Time.timeScale = Paused ? 0f : 1f;
+            if (Paused) { ClearSelection(); EndDragGhost(); }
+            hud.SetPaused(Paused);
+            audioManager.Play(Sfx.Select);
+        }
+
+        void EndDragGhost()
+        {
+            if (dragGhost != null) { Destroy(dragGhost.gameObject); dragGhost = null; }
+        }
+
         void Update()
         {
             double now = TimeUtil.NowUnix;
             float dt = Time.deltaTime;
             if (Screen.width != lastScreenW || Screen.height != lastScreenH) FitCamera();
+
+            if (Paused)
+            {
+                Model.ShiftTimers(Time.unscaledDeltaTime);
+                hudTimer -= Time.unscaledDeltaTime;
+                if (hudTimer <= 0f) { hudTimer = HudRefreshInterval; hud.Refresh(now); }
+                if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
+                return;
+            }
 
             // Navires : arrivée selon l'horloge réelle (fonctionne aussi après une fermeture).
             Model.UpdateShip(now, rng);
@@ -254,12 +289,13 @@ namespace CraneBay.Game
                 if (saveSoonTimer < 0f) SaveNow();
             }
 
-            // Bouton "retour" Android : annule la sélection, sinon quitte proprement.
+            // Bouton "retour" Android : ferme le panneau, annule la sélection,
+            // sinon met en pause (le menu pause propose de quitter).
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (hud.PanelOpen) hud.ClosePanel();
                 else if (!selected.IsNone) ClearSelection();
-                else { SaveNow(); Application.Quit(); }
+                else TogglePause();
             }
         }
 
@@ -853,5 +889,11 @@ namespace CraneBay.Game
         }
 
         void OnApplicationQuit() => SaveNow();
+
+        public void QuitGame()
+        {
+            SaveNow();
+            Application.Quit();
+        }
     }
 }
