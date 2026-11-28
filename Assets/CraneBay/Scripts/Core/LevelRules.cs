@@ -20,6 +20,32 @@ namespace CraneBay.Core
 
     public static class LevelRules
     {
+        // --- Carte au choix de fin de niveau ------------------------------------
+        /// <summary>Carte "argent" : 100 $ par niveau atteint.</summary>
+        public static int CardMoney(int level) => 100 * Math.Max(1, level);
+        /// <summary>Carte "turbo" : grue x2 pendant 3 minutes.</summary>
+        public const double CardTurboSeconds = 180;
+
+        // --- Étoiles de fin de niveau -----------------------------------------
+        // 1 étoile d'office, +1 si au plus un véhicule est reparti sans être
+        // servi, +1 si au moins un quart des livraisons ont eu le bonus rapidité.
+        public const int MaxMissedForStar = 1;
+        public const double FastShareForStar = 0.25;
+        static readonly double[] StarFactors = { 1.0, 1.0, 1.5, 2.0 };
+        /// <summary>Turbo de grue offert pour un niveau à 3 étoiles.</summary>
+        public const double ThreeStarTurboSeconds = 120;
+
+        public static int Stars(int delivered, int fast, int missed)
+        {
+            int stars = 1;
+            if (missed <= MaxMissedForStar) stars++;
+            if (delivered > 0 && fast >= delivered * FastShareForStar) stars++;
+            return stars;
+        }
+
+        /// <summary>Multiplicateur de la prime de niveau selon les étoiles (x1, x1,5, x2).</summary>
+        public static double StarFactor(int stars) => StarFactors[Math.Max(0, Math.Min(3, stars))];
+
         public const int MaxLevel = 30;
 
         // XP par couleur livrée (même ordre que ContainerColor).

@@ -53,6 +53,17 @@ namespace CraneBay.Core
         public double bestUnloadSeconds;      // 0 = pas encore de record
         public int bestSingleDelivery;
 
+        // Bilan du niveau en cours (étoiles de fin de niveau), remis à zéro à chaque niveau.
+        public int levelDelivered;
+        public int levelFast;
+        public int levelMissed;               // véhicules repartis sans être complets
+
+        // Série de jours du coffre du jour (1 à 7, puis recommence).
+        public int dailyStreak;
+
+        // Cartes de fin de niveau encore à choisir (une par niveau franchi).
+        public int pendingCards;
+
         public static SaveData NewGame(double nowUnix)
         {
             return new SaveData
@@ -70,6 +81,11 @@ namespace CraneBay.Core
         /// </summary>
         public void Sanitize(double nowUnix)
         {
+            levelDelivered = Math.Max(0, levelDelivered);
+            levelFast = Math.Max(0, Math.Min(levelFast, levelDelivered));
+            levelMissed = Math.Max(0, levelMissed);
+            dailyStreak = Math.Max(0, dailyStreak);
+            pendingCards = Math.Max(0, Math.Min(5, pendingCards));
             int n = GameRules.UpgradeCount;
             if (upgrades == null || upgrades.Length != n)
             {

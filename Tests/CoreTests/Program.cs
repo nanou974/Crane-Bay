@@ -31,6 +31,8 @@ static class Program
         LevelUpWaitsForVehicles();
         Music();
         PauseAndIncome();
+        StarsAndStreak();
+        LevelCards();
         Console.WriteLine(failures == 0 ? $"OK : {checks} vérifications réussies" : $"{failures}/{checks} vérifications en échec");
         return failures == 0 ? 0 : 1;
     }
@@ -231,7 +233,7 @@ static class Program
         int need = LevelRules.XpToNext(1);
         Check(m.AddXp(need - 1) == 0 && m.PlayerLevel == 1, "pas de niveau avant le seuil");
         Check(m.AddXp(1) == 1 && m.PlayerLevel == 2 && m.Data.xp == 0, "passage au niveau 2 au seuil exact");
-        Check(ups.Count == 1 && ups[0].reward == LevelRules.LevelUpReward(2) && m.Data.money == money0 + ups[0].reward, "prime de niveau versée");
+        Check(ups.Count == 1 && ups[0].baseReward == LevelRules.LevelUpReward(2) && m.Data.money == money0 + ups[0].reward, "prime de niveau versée");
         Check(ups[0].unlockedColor == (int)ContainerColor.Vert, "le vert se débloque au niveau 2");
         Check(m.AddXp(10_000_000) > 1 && m.IsMaxLevel && m.Data.xp == 0, "plusieurs niveaux d'un coup, plafonné au max");
         Check(m.AddXp(50) == 0, "plus d'XP au niveau max");
@@ -408,6 +410,81 @@ static class Program
             }
         }
         return 0;
+    }
+
+    /// <summary>Étoiles de fin de niveau et série de jours du coffre du jour.</summary>
+    static void StarsAndStreak()
+    {
+        Check(LevelRules.Stars(10, 0, 5) == 1, "1 étoile : beaucoup de véhicules ratés, pas de rapidité");
+        Check(LevelRules.Stars(10, 0, 1) == 2, "2 étoiles : au plus un véhicule raté");
+        Check(LevelRules.Stars(8, 2, 0) == 3, "3 étoiles : rien raté + un quart en rapide");
+        Check(LevelRules.Stars(8, 2, 3) == 2, "rapide mais trop de ratés : 2 étoiles");
+        Check(LevelRules.StarFactor(1) == 1.0 && LevelRules.StarFactor(2) == 1.5 && LevelRules.StarFactor(3) == 2.0, "prime x1 / x1,5 / x2");
+
+        // Passage de niveau avec 3 étoiles : prime doublée + turbo, bilan remis à zéro.
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.Data.levelDelivered = 8; m.Data.levelFast = 2; m.Data.levelMissed = 0;
+        var ups = new List<LevelUpInfo>();
+        m.LevelUp += ups.Add;
+        long money0 = m.Data.money;
+        m.AddXp(LevelRules.XpToNext(1));
+        Check(ups.Count == 1 && ups[0].stars == 3 && ups[0].reward == ups[0].baseReward * 2, "3 étoiles : prime doublée");
+        Check(m.Data.money == money0 + ups[0].reward && m.TurboActive(now + 60), "3 étoiles : argent versé et turbo offert");
+        Check(m.Data.levelDelivered == 0 && m.Data.levelFast == 0 && m.Data.levelMissed == 0, "bilan remis à zéro");
+
+        // Série de jours.
+        double day = 24 * 3600;
+        Check(ChestLogic.NextStreak(0, 0, now) == 1, "série : première ouverture = jour 1");
+        Check(ChestLogic.NextStreak(3, now - day, now) == 4, "série : lendemain = jour suivant");
+        Check(ChestLogic.NextStreak(3, now - 47 * 3600, now) == 4, "série : marge jusqu'à 48 h");
+        Check(ChestLogic.NextStreak(3, now - 49 * 3600, now) == 1, "série : plus de 48 h = on repart à 1");
+        Check(ChestLogic.StreakDay(7) == 7 && ChestLogic.StreakDay(8) == 1, "série : boucle sur 7 jours");
+        Check(Math.Abs(ChestLogic.StreakFactor(7) - 2.5) < 1e-9 && ChestLogic.StreakFactor(1) == 1.0, "série : x1 à x2,5");
+
+        var c = new PortModel(null, now);
+        var rng = new Random(4);
+        double t = now;
+        int lastMoney = 0;
+        for (int d = 1; d <= 7; d++)
+        {
+            Check(c.NextStreakDay(t) == d, "série : jour " + d + " annoncé");
+            Check(c.TryOpenChest(ChestKind.Quotidien, t, rng, out var r), "série : coffre ouvert jour " + d);
+            Check(r.streakDay == d, "série : jour " + d + " appliqué");
+            if (d == 7) Check(r.turboSeconds >= GameRules.TurboDurationDaily * 2, "série : gros turbo au 7e jour");
+            lastMoney = r.money;
+            t += day + 600;
+        }
+        Check(c.NextStreakDay(t) == 1, "série : après le 7e jour, retour au jour 1");
+        Check(c.NextStreakDay(t + 3 * day) == 1, "série : rompue après une longue absence");
+    }
+
+    /// <summary>Carte au choix de fin de niveau.</summary>
+    static void LevelCards()
+    {
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        Check(!m.HasPendingCard && !m.ChooseCard(LevelCard.Argent, now), "pas de carte avant un niveau");
+        m.AddXp(LevelRules.XpToNext(1));
+        Check(m.HasPendingCard, "une carte à choisir après le niveau");
+        long money0 = m.Data.money;
+        Check(m.ChooseCard(LevelCard.Argent, now) && m.Data.money == money0 + LevelRules.CardMoney(2), "carte argent");
+        Check(!m.HasPendingCard, "une seule carte par niveau");
+
+        m.AddXp(LevelRules.XpToNext(2));
+        m.Data.turboEndUnix = 0;
+        Check(m.ChooseCard(LevelCard.Turbo, now) && m.TurboActive(now + 170) && !m.TurboActive(now + 190), "carte turbo : 3 min");
+
+        m.AddXp(LevelRules.XpToNext(3));
+        int up = m.FreeUpgradeOption();
+        int before = m.Data.upgrades[up];
+        Check(up >= 0 && m.ChooseCard(LevelCard.Amelioration, now) && m.Data.upgrades[up] == before + 1, "carte amélioration : +1 niveau gratuit");
+
+        // Tout au maximum : la carte amélioration donne de l'argent.
+        for (int i = 0; i < GameRules.UpgradeCount; i++) m.Data.upgrades[i] = GameRules.MaxLevelOf((UpgradeType)i);
+        m.AddXp(LevelRules.XpToNext(4));
+        money0 = m.Data.money;
+        Check(m.FreeUpgradeOption() == -1 && m.ChooseCard(LevelCard.Amelioration, now) && m.Data.money > money0, "tout au max : argent à la place");
     }
 
     static Location Y(int slot) => new Location(LocationKind.Yard, slot);

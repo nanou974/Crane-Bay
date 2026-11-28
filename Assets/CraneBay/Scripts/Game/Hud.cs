@@ -56,6 +56,7 @@ namespace CraneBay.Game
         RectTransform banner;
         CanvasGroup bannerGroup;
         Text bannerTitle, bannerSub;
+        readonly List<Image[]> bannerStars = new List<Image[]>();
         float bannerTimer;
         const float BannerDuration = 3.2f;
 
@@ -105,6 +106,7 @@ namespace CraneBay.Game
             BuildToast();
             BuildBanner();
             BuildPanel();
+            BuildCardPanel();
             BuildPauseOverlay();
         }
 
@@ -297,15 +299,92 @@ namespace CraneBay.Game
         void BuildBanner()
         {
             banner = NewRect("BanniereNiveau", safeRoot);
-            SetRect(banner, new Vector2(0.5f, 0.5f), new Vector2(0, 160), new Vector2(1000, 360), true);
+            SetRect(banner, new Vector2(0.5f, 0.5f), new Vector2(0, 160), new Vector2(1000, 520), true);
             bannerGroup = banner.gameObject.AddComponent<CanvasGroup>();
             bannerGroup.blocksRaycasts = false;
             bannerGroup.interactable = false;
             bannerTitle = AddText(banner, "Titre", "", 130, Palette.UiGold, TextAnchor.MiddleCenter, new Vector2(0.5f, 1), new Vector2(0, 0), new Vector2(1000, 170), true);
             var o = bannerTitle.GetComponent<Outline>();
             o.effectDistance = new Vector2(5, -5);
-            bannerSub = AddText(banner, "SousTitre", "", 40, Palette.UiText, TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -170), new Vector2(980, 190), true);
+            // Trois étoiles (bilan du niveau) : chacune = deux carrés superposés, l'un tourné de 45°.
+            for (int i = 0; i < 3; i++)
+            {
+                var star = NewRect("Etoile" + i, banner);
+                SetRect(star, new Vector2(0.5f, 1), new Vector2((i - 1) * 110f, -215), new Vector2(76, 76), true);
+                star.pivot = new Vector2(0.5f, 0.5f);
+                var parts = new Image[2];
+                for (int k = 0; k < 2; k++)
+                {
+                    var sq = NewRect("Branche" + k, star);
+                    SetRect(sq, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56, 56), true);
+                    sq.localRotation = Quaternion.Euler(0, 0, k * 45f);
+                    parts[k] = AddImage(sq.gameObject, SpriteFactory.UiRounded, Palette.UiGold);
+                    parts[k].raycastTarget = false;
+                    var ol = parts[k].gameObject.AddComponent<Outline>();
+                    ol.effectColor = new Color(0.07f, 0.08f, 0.12f, 0.9f);
+                    ol.effectDistance = new Vector2(3, -3);
+                }
+                bannerStars.Add(parts);
+            }
+            bannerSub = AddText(banner, "SousTitre", "", 40, Palette.UiText, TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -265), new Vector2(980, 240), true);
             bannerGroup.alpha = 0f;
+        }
+
+        // --- Carte au choix de fin de niveau ---------------------------------------
+        GameObject cardPanel;
+        readonly Text[] cardTitles = new Text[3];
+        readonly Text[] cardTexts = new Text[3];
+        static readonly Color[] CardColors = { new Color(0.95f, 0.72f, 0.15f), new Color(1f, 0.5f, 0.15f), new Color(0.3f, 0.7f, 1f) };
+
+        /// <summary>Fenêtre "Choisis ta récompense" : trois cartes côte à côte.</summary>
+        void BuildCardPanel()
+        {
+            cardPanel = new GameObject("CarteAuChoix", typeof(RectTransform));
+            var root = (RectTransform)cardPanel.transform;
+            root.SetParent(safeRoot, false);
+            Stretch(root);
+            var dim = AddImage(root.gameObject, SpriteFactory.UiRounded, new Color(0, 0, 0, 0.6f));
+            dim.type = Image.Type.Simple;
+
+            AddText(root, "Titre", "Choisis ta récompense !", 64, Palette.UiGold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), new Vector2(0, 330), new Vector2(1000, 100), true);
+
+            for (int i = 0; i < 3; i++)
+            {
+                var card = (LevelCard)i;
+                var b = MakeButton(root, "Carte" + i, new Vector2(0.5f, 0.5f), new Vector2((i - 1) * 330f, 0), new Vector2(300, 440), CardColors[i], out var img);
+                var ol = img.gameObject.AddComponent<Outline>();
+                ol.effectColor = Color.white;
+                ol.effectDistance = new Vector2(4, -4);
+                var rt = (RectTransform)b.transform;
+                cardTitles[i] = AddText(rt, "Nom", "", 44, Color.white, TextAnchor.MiddleCenter,
+                    new Vector2(0.5f, 1), new Vector2(0, -30), new Vector2(280, 120), true);
+                cardTexts[i] = AddText(rt, "Effet", "", 34, Color.white, TextAnchor.MiddleCenter,
+                    new Vector2(0.5f, 1), new Vector2(0, -170), new Vector2(270, 230), true);
+                b.onClick.AddListener(() => game.ChooseCard(card));
+            }
+            cardPanel.SetActive(false);
+        }
+
+        /// <summary>Affiche les cartes quand un niveau vient d'être franchi (après la bannière).</summary>
+        void RefreshCardPanel(PortModel m)
+        {
+            bool show = m.HasPendingCard && bannerTimer <= 0f && !game.Paused;
+            if (cardPanel.activeSelf != show)
+            {
+                cardPanel.SetActive(show);
+                if (show) { ClosePanel(); cardPanel.transform.SetAsLastSibling(); }
+            }
+            if (!show) return;
+            cardTitles[0].text = "Argent";
+            cardTexts[0].text = "+" + FormatMoney(LevelRules.CardMoney(m.PlayerLevel));
+            cardTitles[1].text = "Turbo";
+            cardTexts[1].text = "Grue x2\npendant\n" + ChestLogic.Format(LevelRules.CardTurboSeconds);
+            int up = m.FreeUpgradeOption();
+            cardTitles[2].text = "Amélioration\ngratuite";
+            cardTexts[2].text = up >= 0
+                ? GameRules.UpgradeNames[up] + "\nniveau " + (m.Level((UpgradeType)up) + 1)
+                : "+" + FormatMoney(LevelRules.CardMoney(m.PlayerLevel));
         }
 
         static readonly Color PauseColor = new Color(1f, 0.52f, 0.1f);
@@ -424,9 +503,16 @@ namespace CraneBay.Game
         }
 
         /// <summary>Grande annonce du passage de niveau (avec le feu d'artifice).</summary>
-        public void ShowLevelBanner(int level, string details)
+        public void ShowLevelBanner(int level, string details, int stars = 0)
         {
             bannerTitle.text = "NIVEAU " + level + " !";
+            // Étoiles gagnées en or, les autres en gris sombre (masquées si stars = 0).
+            for (int i = 0; i < bannerStars.Count; i++)
+                foreach (var img in bannerStars[i])
+                {
+                    img.enabled = stars > 0;
+                    img.color = i < stars ? Palette.UiGold : new Color(0.3f, 0.32f, 0.38f, 1f);
+                }
             bannerSub.text = details;
             bannerTimer = BannerDuration;
         }
@@ -496,6 +582,8 @@ namespace CraneBay.Game
                 var ui = chests[i];
                 bool ready = rem <= 0;
                 ui.timer.text = ChestLogic.Format(rem);
+                // Coffre du jour : jour de la série que rapportera la prochaine ouverture.
+                if (i == (int)ChestKind.Quotidien) ui.title.text = "Coffre\nJour " + m.NextStreakDay(now) + "/" + ChestLogic.StreakLength;
                 ui.image.color = ready ? Palette.UiGold : Palette.UiButtonOff;
                 ui.title.color = ready ? Palette.Outline : Palette.UiText;
                 ui.timer.color = ready ? Palette.Outline : Palette.UiText;
@@ -536,6 +624,7 @@ namespace CraneBay.Game
             }
 
             if (PanelOpen) RefreshPanel(now);
+            RefreshCardPanel(m);
         }
 
         void RefreshPanel(double now)

@@ -405,10 +405,13 @@ namespace CraneBay.Game
 
         void OnLevelUp(LevelUpInfo info)
         {
-            string details = "+" + Hud.FormatMoney(info.reward);
+            // Bilan du niveau : étoiles, prime (multipliée par les étoiles), turbo offert.
+            string details = info.delivered + " livraisons, " + info.fast + " rapides, " + info.missed + " véhicule(s) raté(s)";
+            details += "\nPrime : +" + Hud.FormatMoney(info.reward);
+            if (info.stars >= 2) details += " (x" + LevelRules.StarFactor(info.stars).ToString("0.#") + ")";
+            if (info.turboSeconds > 0) details += "  +  TURBO " + ChestLogic.Format(info.turboSeconds);
             if (!string.IsNullOrEmpty(info.unlocks)) details += "\nNouveau : " + info.unlocks;
-            details += "\nLe terminal repart à zéro !";
-            hud.ShowLevelBanner(info.newLevel, details);
+            hud.ShowLevelBanner(info.newLevel, details, info.stars);
             fireworks.Play(8);
             audioManager.Play(Sfx.Fanfare);
             ApplyProgressVisuals();
@@ -799,6 +802,12 @@ namespace CraneBay.Game
                 Feedback(Sfx.Error, "Pas assez d'argent (" + Hud.FormatMoney(Model.NextUpgradeCost(type)) + ")");
                 return;
             }
+            ApplyUpgradeEffects(type, now);
+        }
+
+        /// <summary>Effets immédiats d'un nouveau niveau d'amélioration (achat ou carte gratuite).</summary>
+        void ApplyUpgradeEffects(UpgradeType type, double now)
+        {
             // Une attente raccourcie s'applique tout de suite au compte à rebours en cours.
             if (type == UpgradeType.AttenteNavires && !Model.Data.shipDocked)
                 Model.Data.nextShipUnix = System.Math.Min(Model.Data.nextShipUnix, now + GameRules.ShipInterval(Model.Level(type)));
@@ -819,6 +828,23 @@ namespace CraneBay.Game
             SaveNow();
         }
 
+        /// <summary>Carte au choix de fin de niveau.</summary>
+        public void ChooseCard(LevelCard card)
+        {
+            double now = TimeUtil.NowUnix;
+            int upgrade = Model.FreeUpgradeOption();
+            if (!Model.ChooseCard(card, now)) return;
+            if (card == LevelCard.Amelioration && upgrade >= 0)
+            {
+                ApplyUpgradeEffects((UpgradeType)upgrade, now); // message, visuels, sauvegarde
+                return;
+            }
+            if (card == LevelCard.Turbo) Feedback(Sfx.Chest, "TURBO grue x2 pendant " + ChestLogic.Format(LevelRules.CardTurboSeconds) + " !");
+            else Feedback(Sfx.Coin, "+" + Hud.FormatMoney(LevelRules.CardMoney(Model.PlayerLevel)));
+            hud.Refresh(now);
+            SaveNow();
+        }
+
         public void OpenChest(ChestKind kind)
         {
             double now = TimeUtil.NowUnix;
@@ -828,6 +854,10 @@ namespace CraneBay.Game
                 return;
             }
             string msg = reward.money > 0 ? "Coffre : +" + Hud.FormatMoney(reward.money) : "Coffre :";
+            if (reward.streakDay > 0)
+                msg = "Série jour " + reward.streakDay + "/" + ChestLogic.StreakLength
+                    + (reward.streakDay > 1 ? " (x" + ChestLogic.StreakFactor(reward.streakDay).ToString("0.##") + ")" : "")
+                    + "\n" + msg + (reward.streakDay < ChestLogic.StreakLength ? "\nReviens demain pour la suite !" : "");
             if (reward.turboSeconds > 0) msg += "  TURBO grue x2 pendant " + ChestLogic.Format(reward.turboSeconds);
             Feedback(Sfx.Chest, msg);
             hud.Refresh(now);
