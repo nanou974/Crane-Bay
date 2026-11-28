@@ -65,7 +65,7 @@ if (($p.ExitCode -ne 0 -or -not (Test-Path $Apk)) -and (Select-String -Path $Log
     if ((Test-Path $java) -and $launcherJar -and (Test-Path $gradleDir)) {
         Write-Host "== Gradle a échoué au démarrage (BindException) : relance directe de Gradle"
         Push-Location $gradleDir
-        & $java -classpath $launcherJar.FullName org.gradle.launcher.GradleMain "-Dorg.gradle.jvmargs=-Xmx4096m" assembleRelease *> (Join-Path $ProjectPath "gradle.log")
+        & $java -classpath $launcherJar.FullName org.gradle.launcher.GradleMain "-Dorg.gradle.jvmargs=-Xmx4096m" --no-daemon assembleRelease *> (Join-Path $ProjectPath "gradle.log")
         $gradleExit = $LASTEXITCODE
         Pop-Location
         $built = Join-Path $gradleDir "build\outputs\apk\release\launcher-release.apk"
