@@ -68,6 +68,9 @@ namespace CraneBay.Core
         public int puzzlesSolved;             // numéro du prochain puzzle
         public int puzzlesPerfect;            // résolus en un minimum de coups
 
+        // Écran d'aide déjà vu (affiché automatiquement au premier lancement).
+        public bool tutorialSeen;
+
         public static SaveData NewGame(double nowUnix)
         {
             return new SaveData

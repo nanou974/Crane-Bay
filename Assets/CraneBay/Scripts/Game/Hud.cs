@@ -30,6 +30,7 @@ namespace CraneBay.Game
         CanvasScaler scaler;
         Rect appliedSafeArea;
 
+        Button pauseButton, contractsButton, soundButton;
         Text moneyText, infoText, turboText, toastText, soundText, levelText, xpText;
         RectTransform xpFill;
         CanvasGroup toastGroup;
@@ -110,6 +111,7 @@ namespace CraneBay.Game
             BuildCardPanel();
             BuildPauseOverlay();
             BuildPuzzle();
+            BuildHelp();
         }
 
         void BuildTopBar()
@@ -207,7 +209,7 @@ namespace CraneBay.Game
 
             // Bouton pause bien visible : orange vif, contour blanc, deux barres blanches épaisses.
             // Il dépasse un peu du bandeau pour attirer l'œil.
-            var pause = MakeButton(strip, "Pause", new Vector2(0, 0.5f), new Vector2(6, 0), new Vector2(96, 96), PauseColor, out var pauseImg);
+            var pause = pauseButton = MakeButton(strip, "Pause", new Vector2(0, 0.5f), new Vector2(6, 0), new Vector2(96, 96), PauseColor, out var pauseImg);
             var pauseOutline = pauseImg.gameObject.AddComponent<Outline>();
             pauseOutline.effectColor = Color.white;
             pauseOutline.effectDistance = new Vector2(3, -3);
@@ -245,12 +247,12 @@ namespace CraneBay.Game
                 upcomingUi[i] = ui;
             }
 
-            var contracts = MakeButton(strip, "Contrats", new Vector2(1, 0.5f), new Vector2(-112, 0), new Vector2(170, 66), Palette.UiButton, out _);
+            var contracts = contractsButton = MakeButton(strip, "Contrats", new Vector2(1, 0.5f), new Vector2(-112, 0), new Vector2(170, 66), Palette.UiButton, out _);
             AddText((RectTransform)contracts.transform, "Texte", "Contrats\n& records", 22, Palette.UiText, TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(170, 66), true);
             contracts.onClick.AddListener(TogglePanel);
 
-            var sound = MakeButton(strip, "Son", new Vector2(1, 0.5f), new Vector2(-8, 0), new Vector2(96, 66), Palette.UiButton, out _);
+            var sound = soundButton = MakeButton(strip, "Son", new Vector2(1, 0.5f), new Vector2(-8, 0), new Vector2(96, 66), Palette.UiButton, out _);
             soundText = AddText((RectTransform)sound.transform, "Texte", "Son", 20, Palette.UiText, TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96, 66), true);
             sound.onClick.AddListener(() => { game.ToggleSound(); RefreshSound(); });
@@ -428,12 +430,18 @@ namespace CraneBay.Game
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520, 110), true);
             quit.onClick.AddListener(() => game.QuitGame());
 
+            var help = MakeButton(root, "Aide", new Vector2(0.5f, 0.5f), new Vector2(0, -270), new Vector2(520, 110), Palette.UiButton, out _);
+            ((RectTransform)help.transform).pivot = new Vector2(0.5f, 0.5f);
+            AddText((RectTransform)help.transform, "Texte", "Aide : à quoi servent les boutons ?", 32, Palette.UiText, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(500, 110), true);
+            help.onClick.AddListener(() => game.OpenHelp());
+
             pauseOverlay.SetActive(false);
         }
 
         public void SetPaused(bool paused)
         {
-            if (PuzzleOpen) return; // le mini-jeu a son propre écran
+            if (PuzzleOpen || HelpOpen) return; // le mini-jeu et l'aide ont leur propre écran
             if (paused) ClosePanel();
             pauseOverlay.SetActive(paused);
             pauseOverlay.transform.SetAsLastSibling();
@@ -545,6 +553,7 @@ namespace CraneBay.Game
             if (game == null) return;
             ApplySafeArea();
             UpdatePuzzle();
+            PlaceHelpRings();
 
             // Compteur d'argent animé (monte progressivement vers la vraie valeur).
             double target = game.Model.Data.money;
