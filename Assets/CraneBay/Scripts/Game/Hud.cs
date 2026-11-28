@@ -112,6 +112,7 @@ namespace CraneBay.Game
             BuildPauseOverlay();
             BuildPuzzle();
             BuildHelp();
+            BuildUpdatePanel();
         }
 
         void BuildTopBar()
@@ -441,7 +442,7 @@ namespace CraneBay.Game
 
         public void SetPaused(bool paused)
         {
-            if (PuzzleOpen || HelpOpen) return; // le mini-jeu et l'aide ont leur propre écran
+            if (PuzzleOpen || HelpOpen || UpdateOpen) return; // le mini-jeu et l'aide ont leur propre écran
             if (paused) ClosePanel();
             pauseOverlay.SetActive(paused);
             pauseOverlay.transform.SetAsLastSibling();

@@ -68,6 +68,10 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
   deux piles voisines.
 
 **Autres mécaniques :**
+- *Mise à jour* : au lancement, le jeu regarde sur GitHub (releases de nanou974/Crane-Bay, préversions
+  comprises) si une version plus récente existe. Si oui, une fenêtre montre ses notes avec « Télécharger »
+  (ouvre l'APK dans le navigateur, à installer par-dessus : la partie est conservée) et « Plus tard ».
+  Hors ligne ou en cas d'erreur, rien ne s'affiche (`Core/UpdateRules.cs`, `Game/UpdateChecker.cs`).
 - *Écran d'aide* : au premier lancement, le jeu s'assombrit, chaque bouton est entouré d'un cadre doré
   numéroté et une fiche explique comment jouer et à quoi sert chaque numéro (port en pause). On le revoit
   depuis le menu pause (« Aide »).

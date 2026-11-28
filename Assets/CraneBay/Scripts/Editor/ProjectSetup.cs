@@ -77,7 +77,7 @@ namespace CraneBay.EditorTools
             PlayerSettings.colorSpace = ColorSpace.Gamma;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.Android.forceInternetPermission = false; // aucun accès réseau
+            PlayerSettings.Android.forceInternetPermission = true; // vérification de mise à jour (releases GitHub)
             PlayerSettings.runInBackground = false;
 
             // Un APK (et non un .aab) pour la distribution hors store.
