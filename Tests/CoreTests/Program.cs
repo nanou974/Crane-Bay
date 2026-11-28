@@ -31,6 +31,7 @@ static class Program
         LevelUpWaitsForVehicles();
         ArrivingVehicleTarget();
         Puzzle();
+        Updates();
         Music();
         PauseAndIncome();
         StarsAndStreak();
@@ -429,6 +430,29 @@ static class Program
         var d = new SaveData { puzzlesSolved = -3, puzzlesPerfect = 9 };
         d.Sanitize(1_700_000_000);
         Check(d.puzzlesSolved == 0 && d.puzzlesPerfect == 0, "sauvegarde des puzzles assainie");
+    }
+
+    /// <summary>Mise à jour : comparaison de versions et choix de la release à proposer.</summary>
+    static void Updates()
+    {
+        Check(UpdateRules.Compare("0.1.10", "0.1.9") > 0, "0.1.10 > 0.1.9 (numérique, pas alphabétique)");
+        Check(UpdateRules.Compare("v0.2", "0.1.99") > 0 && UpdateRules.Compare("0.1.5", "0.1.5") == 0 && UpdateRules.Compare("0.1", "0.1.0") == 0, "comparaisons diverses");
+        Check(!UpdateRules.IsVersion("") && !UpdateRules.IsVersion("beta") && UpdateRules.IsVersion("v1.0"), "versions valides");
+        ReleaseInfo R(string tag, bool draft = false, string apk = null) => new ReleaseInfo
+        {
+            tag_name = tag, draft = draft, prerelease = true, html_url = "https://example.invalid/" + tag,
+            assets = apk == null ? new ReleaseAsset[0] : new[] { new ReleaseAsset { name = "notes.txt", browser_download_url = "x" }, new ReleaseAsset { name = apk, browser_download_url = "dl/" + apk } },
+        };
+        var list = new List<ReleaseInfo> { R("0.1.9"), R("0.1.12", draft: true), R("0.1.10", apk: "CraneBay_v0.1.10.apk"), R("0.1.8"), R("nightly") };
+        var n = UpdateRules.NewerThan(list, "0.1.8");
+        Check(n != null && n.tag_name == "0.1.10", "propose la plus récente publiée (brouillon ignoré)");
+        Check(n.DownloadUrl == "dl/CraneBay_v0.1.10.apk", "lien direct vers l'APK");
+        Check(R("0.1.9").DownloadUrl.EndsWith("0.1.9"), "sans APK : page de la release");
+        Check(UpdateRules.NewerThan(list, "0.1.10") == null, "à jour : rien à proposer");
+        Check(UpdateRules.NewerThan(list, "") == null && UpdateRules.NewerThan(null, "0.1.0") == null, "version inconnue : rien à proposer");
+        var notes = UpdateRules.ShortNotes("## Nouveautés\r\n- **Mini-jeu** Détente\n\n* `XP` x1,1", 600);
+        Check(notes == "Nouveautés\n• Mini-jeu Détente\n• XP x1,1", "notes nettoyées : " + notes);
+        Check(UpdateRules.ShortNotes(new string('a', 900), 100).Length == 100, "notes raccourcies");
     }
 
     /// <summary>Musique : boucle déterministe, sans saturation, avec un raccord sans claquement.</summary>

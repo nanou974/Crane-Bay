@@ -142,6 +142,9 @@ namespace CraneBay.Game
 
             // Premier lancement : écran d'aide avec l'explication de chaque bouton.
             if (!Model.Data.tutorialSeen) OpenHelp();
+
+            // Nouvelle version publiée sur GitHub ? (silencieux hors ligne)
+            gameObject.AddComponent<UpdateChecker>().Init(this);
         }
 
         CraneController CreateCrane(bool main)
@@ -249,6 +252,31 @@ namespace CraneBay.Game
             SaveNow();
         }
 
+        // --- Mise à jour disponible ---------------------------------------------
+
+        /// <summary>Le joueur n'est occupé par aucun écran (aide, mini-jeu, pause, mise à jour).</summary>
+        public bool CanShowUpdate => !Paused && !hud.HelpOpen && !hud.PuzzleOpen && !hud.UpdateOpen;
+
+        public void OpenUpdate(ReleaseInfo r)
+        {
+            if (r == null || !CanShowUpdate) return;
+            Paused = true;
+            Time.timeScale = 0f;
+            ClearSelection();
+            EndDragGhost();
+            hud.ShowUpdate(r);
+            audioManager.Play(Sfx.Chest);
+        }
+
+        public void CloseUpdate()
+        {
+            if (!hud.UpdateOpen) return;
+            hud.HideUpdate();
+            Paused = false;
+            Time.timeScale = 1f;
+            audioManager.Play(Sfx.Select);
+        }
+
         // --- Écran d'aide ------------------------------------------------------
 
         bool helpWasPaused;
@@ -310,7 +338,8 @@ namespace CraneBay.Game
                 if (hudTimer <= 0f) { hudTimer = HudRefreshInterval; hud.Refresh(now); }
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
-                    if (hud.HelpOpen) CloseHelp();
+                    if (hud.UpdateOpen) CloseUpdate();
+                    else if (hud.HelpOpen) CloseHelp();
                     else if (hud.PuzzleOpen) ClosePuzzle();
                     else TogglePause();
                 }
