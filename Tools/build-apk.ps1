@@ -54,6 +54,29 @@ $unityArgs = @("-batchmode", "-quit", "-projectPath", "`"$ProjectPath`"", "-buil
     "-appVersion", $Version, "-logFile", "`"$LogFile`"")
 $p = Start-Process -FilePath $UnityExe -ArgumentList $unityArgs -Wait -PassThru -NoNewWindow
 
+# Sur ce PC, Gradle échoue parfois au démarrage depuis Unity en mode batch
+# ("BindException: Address already in use" dans FileLockContentionHandler).
+# Le projet Gradle est alors déjà généré : on relance Gradle directement.
+if (($p.ExitCode -ne 0 -or -not (Test-Path $Apk)) -and (Select-String -Path $LogFile -Pattern "BindException" -Quiet)) {
+    $unityDir = Split-Path -Parent $UnityExe
+    $java = Join-Path $unityDir "Data\PlaybackEngines\AndroidPlayer\OpenJDK\bin\java.exe"
+    $launcherJar = Get-ChildItem (Join-Path $unityDir "Data\PlaybackEngines\AndroidPlayer\Tools\gradle\lib") -Filter "gradle-launcher-*.jar" | Select-Object -First 1
+    $gradleDir = Join-Path $ProjectPath "Library\Bee\Android\Prj\IL2CPP\Gradle\launcher"
+    if ((Test-Path $java) -and $launcherJar -and (Test-Path $gradleDir)) {
+        Write-Host "== Gradle a échoué au démarrage (BindException) : relance directe de Gradle"
+        Push-Location $gradleDir
+        & $java -classpath $launcherJar.FullName org.gradle.launcher.GradleMain "-Dorg.gradle.jvmargs=-Xmx4096m" --no-daemon assembleRelease *> (Join-Path $ProjectPath "gradle.log")
+        $gradleExit = $LASTEXITCODE
+        Pop-Location
+        $built = Join-Path $gradleDir "build\outputs\apk\release\launcher-release.apk"
+        if ($gradleExit -eq 0 -and (Test-Path $built)) {
+            New-Item -ItemType Directory -Force (Split-Path -Parent $Apk) | Out-Null
+            Copy-Item $built $Apk -Force
+            $p = [pscustomobject]@{ ExitCode = 0 }
+        }
+    }
+}
+
 if ($p.ExitCode -ne 0 -or -not (Test-Path $Apk)) {
     Write-Host "== ÉCHEC (code $($p.ExitCode)). Dernières lignes du journal :" -ForegroundColor Red
     Get-Content $LogFile -Tail 40

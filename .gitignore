@@ -26,3 +26,4 @@
 Tests/**/bin/
 Tests/**/obj/
 build.log
+gradle.log
