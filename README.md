@@ -19,8 +19,9 @@ Gratuit, sans publicité ni achat intégré, distribué en APK hors store.
    (+50 % en train).
 5. L'argent achète des améliorations au coût croissant : **vitesse de la grue**, **attente entre deux
    navires**, **attente entre deux camions/trains** (10 niveaux chacune), **agrandir le parc** (2 niveaux :
-   une 4e rangée, puis des piles de 4) et une **2e grue** (elle dessert le parc, les camions et les trains,
-   mais pas le navire).
+   une 4e rangée, puis des piles de 4), une **2e grue** (elle dessert le parc, les camions et les trains,
+   mais pas le navire) et **revenus** (10 niveaux, +10 % d'argent par niveau sur les livraisons et les
+   primes de contrats).
 
 **Le casse-tête :** la grue ne peut saisir que le conteneur du dessus d'une pile. Pour sortir un conteneur
 enfoui, il faut d'abord déplacer ceux qui sont au-dessus. Un véhicule qui attend trop longtemps (jauge de
@@ -74,8 +75,12 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
 générée par code au lancement (`Core/MusicSynth.cs`) : pas de fichier audio, donc aucun problème de droits.
 Le bouton « Son » fait défiler : sons + musique, sons seuls, muet.
 
+**Pause :** le bouton ⏸ à gauche du bandeau « À venir » (ou le bouton retour d'Android) fige le jeu :
+grues, véhicules, attente du navire et patience des chauffeurs. Les coffres continuent de se recharger.
+L'écran de pause propose « Reprendre » et « Sauvegarder et quitter ».
+
 **Contrôles :** toucher une pile puis toucher la destination, ou glisser-déposer du doigt. Les destinations
-possibles s'allument en vert. Le bouton retour d'Android annule la sélection.
+possibles s'allument en vert. Le bouton retour d'Android annule la sélection, sinon met le jeu en pause.
 
 **Orientation : portrait**, pour jouer à une main. Pour passer en paysage, il faut modifier
 `ProjectSetup.cs` (orientation) et `BoardLayout.cs` (disposition).

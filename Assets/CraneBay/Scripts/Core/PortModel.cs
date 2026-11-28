@@ -334,7 +334,7 @@ namespace CraneBay.Core
             bool train = v.kind == VehicleKind.Train;
             res.fast = now - v.arrivedUnix <= GameRules.FastDeliverySeconds;
             d.loaded = c;
-            int gain = GameRules.Payout(c, train, res.fast);
+            int gain = (int)Math.Round(GameRules.Payout(c, train, res.fast) * GameRules.IncomeMultiplier(Level(UpgradeType.Revenus)));
             AddMoney(gain);
             Data.delivered++;
             if (res.fast) Data.fastDeliveries++;
@@ -646,6 +646,25 @@ namespace CraneBay.Core
             VehicleLeaving?.Invoke(v);
         }
 
+        /// <summary>
+        /// Pause : décale toutes les échéances de jeu (navire, véhicules, turbo,
+        /// record de déchargement) de la durée de la pause, pour que rien n'avance.
+        /// Les coffres, eux, suivent l'heure réelle et ne sont pas décalés.
+        /// </summary>
+        public void ShiftTimers(double seconds)
+        {
+            if (seconds <= 0) return;
+            if (!Data.shipDocked) Data.nextShipUnix += seconds;
+            if (Data.shipDockedSinceUnix > 0) Data.shipDockedSinceUnix += seconds;
+            if (Data.turboEndUnix > 0) Data.turboEndUnix += seconds;
+            nextVehicleUnix += seconds;
+            foreach (var v in vehicles)
+            {
+                v.arrivedUnix += seconds;
+                v.deadlineUnix += seconds;
+            }
+        }
+
         /// <summary>Le véhicule a quitté l'écran : on libère sa place.</summary>
         public void RemoveVehicle(Vehicle v) => vehicles.Remove(v);
 
@@ -769,7 +788,7 @@ namespace CraneBay.Core
                 k.progress++;
                 if (k.progress < k.target) continue;
                 k.done = true;
-                AddMoney(k.rewardMoney);
+                AddMoney((long)Math.Round(k.rewardMoney * GameRules.IncomeMultiplier(Level(UpgradeType.Revenus))));
                 ContractCompleted?.Invoke(k);
                 levels += AddXp(k.rewardXp);
             }

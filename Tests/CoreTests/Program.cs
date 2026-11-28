@@ -30,6 +30,7 @@ static class Program
         AmbienceThemesRecords();
         LevelUpWaitsForVehicles();
         Music();
+        PauseAndIncome();
         Console.WriteLine(failures == 0 ? $"OK : {checks} vérifications réussies" : $"{failures}/{checks} vérifications en échec");
         return failures == 0 ? 0 : 1;
     }
@@ -354,6 +355,59 @@ static class Program
             for (int i = 1; i < a.Length; i++) typical = Math.Max(typical, Math.Abs(a[i] - a[i - 1]));
             Check(jump <= typical, n + " : raccord de boucle sans claquement");
         }
+    }
+
+    /// <summary>Pause (décalage des échéances) et amélioration "Revenus".</summary>
+    static void PauseAndIncome()
+    {
+        var rng = new Random(5);
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.Data.nextShipUnix = now + 30;
+        m.Data.turboEndUnix = now + 60;
+        m.nextVehicleUnix = now + 10;
+        double lastDaily = m.Data.lastDailyChestUnix;
+        m.ShiftTimers(100);
+        Check(m.Data.nextShipUnix == now + 130 && m.Data.turboEndUnix == now + 160 && m.nextVehicleUnix == now + 110, "pause : échéances décalées");
+        Check(m.Data.lastDailyChestUnix == lastDaily, "pause : les coffres suivent l'heure réelle");
+        Check(!m.UpdateShip(now + 100, rng), "pause : le navire n'est pas arrivé pendant la pause");
+
+        // Revenus : +10 % par niveau sur les livraisons.
+        Check(Math.Abs(GameRules.IncomeMultiplier(0) - 1.0) < 1e-9 && Math.Abs(GameRules.IncomeMultiplier(10) - 2.0) < 1e-9, "revenus : x1 à x2");
+        Check(GameRules.EffectLabel(UpgradeType.Revenus, 3) == "+30 %", "revenus : libellé");
+        Check(GameRules.UpgradeCost(UpgradeType.Revenus, 1) > GameRules.UpgradeCost(UpgradeType.Revenus, 0), "revenus : coût croissant");
+
+        double t = now;
+        var a = new PortModel(null, t);
+        var b = new PortModel(null, t);
+        b.Data.upgrades[(int)UpgradeType.Revenus] = 5;
+        var ra = new Random(3); var rb = new Random(3);
+        a.UpdateShip(t + 2, ra); b.UpdateShip(t + 2, rb);
+        a.nextVehicleUnix = t; b.nextVehicleUnix = t;
+        Vehicle va = null, vb = null;
+        for (int i = 0; i < 50 && va == null; i++) { va = a.UpdateVehicles(t, ra); vb = b.UpdateVehicles(t, rb); }
+        Check(va != null && vb != null, "revenus : véhicules présents");
+        a.MarkArrived(va, t); b.MarkArrived(vb, t);
+        long ga = DeliverAny(a, va, t + 20), gb = DeliverAny(b, vb, t + 20);
+        Check(ga > 0 && Math.Abs(gb - ga * 1.5) <= 1, "revenus : +50 % au niveau 5 (" + ga + " -> " + gb + ")");
+    }
+
+    /// <summary>Livre au véhicule le premier conteneur possible ; renvoie le gain.</summary>
+    static long DeliverAny(PortModel m, Vehicle v, double now)
+    {
+        for (int i = 0; i < v.demands.Count; i++)
+        {
+            var to = v.kind == VehicleKind.Train ? new Location(LocationKind.Wagon, i) : new Location(LocationKind.Truck, v.bay);
+            for (int s = 0; s < m.Data.ship.SlotCount; s++)
+            {
+                var f = new Location(LocationKind.Ship, s);
+                if (!m.CanMove(f, to)) continue;
+                var c = m.Pick(f);
+                var r = m.Drop(to, c, now);
+                return r.ok ? r.earned : 0;
+            }
+        }
+        return 0;
     }
 
     static Location Y(int slot) => new Location(LocationKind.Yard, slot);

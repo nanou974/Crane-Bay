@@ -15,11 +15,12 @@ namespace CraneBay.Core
         AttenteVehicules = 2,
         AgrandirParc = 3,
         DeuxiemeGrue = 4,
+        Revenus = 5,
     }
 
     public static class GameRules
     {
-        public const int UpgradeCount = 5;
+        public const int UpgradeCount = 6;
 
         // --- Parc de stockage --------------------------------------------------
         // La grille de stockage a toujours 5 x 4 emplacements et 4 niveaux de
@@ -110,11 +111,11 @@ namespace CraneBay.Core
 
         // --- Améliorations -----------------------------------------------------
         public const int UpgradeMaxLevel = 10; // niveau max des 3 améliorations "à niveaux"
-        static readonly int[] MaxLevels = { 10, 10, 10, 2, 1 };
-        static readonly int[] UpgradeBaseCost = { 100, 150, 120, 900, 2500 };
-        static readonly double[] UpgradeCostGrowth = { 1.6, 1.65, 1.6, 2.8, 1.0 };
+        static readonly int[] MaxLevels = { 10, 10, 10, 2, 1, 10 };
+        static readonly int[] UpgradeBaseCost = { 100, 150, 120, 900, 2500, 200 };
+        static readonly double[] UpgradeCostGrowth = { 1.6, 1.65, 1.6, 2.8, 1.0, 1.7 };
 
-        public static readonly string[] UpgradeNames = { "Vitesse grue", "Attente navires", "Attente camions", "Agrandir le parc", "2e grue" };
+        public static readonly string[] UpgradeNames = { "Vitesse grue", "Attente navires", "Attente camions", "Agrandir le parc", "2e grue", "Revenus" };
 
         public static int MaxLevelOf(UpgradeType t) => MaxLevels[(int)t];
 
@@ -152,6 +153,11 @@ namespace CraneBay.Core
         public static float VehicleInterval(int level) => 16f * (float)Math.Pow(0.85, level);
 
         /// <summary>Texte court décrivant l'effet d'une amélioration à un niveau donné.</summary>
+        /// <summary>Amélioration "Revenus" : +10 % sur chaque livraison et chaque prime de contrat, par niveau.</summary>
+        public const double IncomePerLevel = 0.10;
+
+        public static double IncomeMultiplier(int level) => 1.0 + IncomePerLevel * Math.Max(0, level);
+
         public static string EffectLabel(UpgradeType type, int level)
         {
             switch (type)
@@ -159,6 +165,7 @@ namespace CraneBay.Core
                 case UpgradeType.VitesseGrue: return "x" + CraneSpeedMultiplier(level).ToString("0.0");
                 case UpgradeType.AttenteNavires: return ShipInterval(level).ToString("0") + " s";
                 case UpgradeType.AttenteVehicules: return VehicleInterval(level).ToString("0.0") + " s";
+                case UpgradeType.Revenus: return "+" + Math.Round((IncomeMultiplier(level) - 1) * 100) + " %";
                 case UpgradeType.AgrandirParc: return YardColumns + "x" + YardRowsUnlocked(level) + " h" + YardHeightLimit(level);
                 default: return level >= 1 ? "Oui" : "Non";
             }
