@@ -139,6 +139,9 @@ namespace CraneBay.Game
             }
             ApplyProgressVisuals();
             hud.Refresh(now);
+
+            // Premier lancement : écran d'aide avec l'explication de chaque bouton.
+            if (!Model.Data.tutorialSeen) OpenHelp();
         }
 
         CraneController CreateCrane(bool main)
@@ -246,6 +249,38 @@ namespace CraneBay.Game
             SaveNow();
         }
 
+        // --- Écran d'aide ------------------------------------------------------
+
+        bool helpWasPaused;
+
+        public void OpenHelp()
+        {
+            if (hud.HelpOpen) return;
+            helpWasPaused = Paused;
+            if (!Paused)
+            {
+                Paused = true;
+                Time.timeScale = 0f;
+                ClearSelection();
+                EndDragGhost();
+            }
+            hud.ShowHelp();
+        }
+
+        public void CloseHelp()
+        {
+            if (!hud.HelpOpen) return;
+            hud.HideHelp();
+            // Ouverte depuis le menu pause : on y revient ; sinon le port repart.
+            if (!helpWasPaused)
+            {
+                Paused = false;
+                Time.timeScale = 1f;
+            }
+            audioManager.Play(Sfx.Select);
+            if (!Model.Data.tutorialSeen) { Model.Data.tutorialSeen = true; SaveNow(); }
+        }
+
         /// <summary>Puzzle résolu : prime, son, sauvegarde. Renvoie la prime.</summary>
         public long CompletePuzzle(bool perfect)
         {
@@ -275,7 +310,8 @@ namespace CraneBay.Game
                 if (hudTimer <= 0f) { hudTimer = HudRefreshInterval; hud.Refresh(now); }
                 if (Input.GetKeyDown(KeyCode.Escape))
                 {
-                    if (hud.PuzzleOpen) ClosePuzzle();
+                    if (hud.HelpOpen) CloseHelp();
+                    else if (hud.PuzzleOpen) ClosePuzzle();
                     else TogglePause();
                 }
                 return;
