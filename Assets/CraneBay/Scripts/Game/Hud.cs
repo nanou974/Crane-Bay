@@ -201,18 +201,26 @@ namespace CraneBay.Game
             strip.anchoredPosition = new Vector2(0, -TopBarHeight - 6);
             AddImage(strip.gameObject, SpriteFactory.UiRounded, new Color(0.12f, 0.14f, 0.2f, 0.78f));
 
-            // Bouton pause (deux barres verticales dessinées), à gauche du bandeau.
-            var pause = MakeButton(strip, "Pause", new Vector2(0, 0.5f), new Vector2(8, 0), new Vector2(70, 66), Palette.UiButton, out _);
-            foreach (var bx in new[] { -10f, 10f })
+            // Bouton pause bien visible : orange vif, contour blanc, deux barres blanches épaisses.
+            // Il dépasse un peu du bandeau pour attirer l'œil.
+            var pause = MakeButton(strip, "Pause", new Vector2(0, 0.5f), new Vector2(6, 0), new Vector2(96, 96), PauseColor, out var pauseImg);
+            var pauseOutline = pauseImg.gameObject.AddComponent<Outline>();
+            pauseOutline.effectColor = Color.white;
+            pauseOutline.effectDistance = new Vector2(3, -3);
+            foreach (var bx in new[] { -13f, 13f })
             {
                 var barRt = NewRect("Barre", (RectTransform)pause.transform);
-                SetRect(barRt, new Vector2(0.5f, 0.5f), new Vector2(bx, 0), new Vector2(12, 34), true);
-                AddImage(barRt.gameObject, SpriteFactory.UiRounded, Palette.UiText).raycastTarget = false;
+                SetRect(barRt, new Vector2(0.5f, 0.5f), new Vector2(bx, 0), new Vector2(18, 50), true);
+                var barImg = AddImage(barRt.gameObject, SpriteFactory.UiRounded, Color.white);
+                barImg.raycastTarget = false;
+                var barOutline = barImg.gameObject.AddComponent<Outline>();
+                barOutline.effectColor = new Color(0.35f, 0.15f, 0f, 0.8f);
+                barOutline.effectDistance = new Vector2(2, -2);
             }
             pause.onClick.AddListener(() => game.TogglePause());
 
             AddText(strip, "Titre", "À venir", 26, new Color(1, 1, 1, 0.75f), TextAnchor.MiddleLeft,
-                new Vector2(0, 0.5f), new Vector2(90, 0), new Vector2(110, 60));
+                new Vector2(0, 0.5f), new Vector2(114, 0), new Vector2(110, 60));
             for (int i = 0; i < GameRules.UpcomingCount; i++)
             {
                 var g = NewRect("Vehicule" + i, strip);
@@ -299,6 +307,8 @@ namespace CraneBay.Game
             bannerSub = AddText(banner, "SousTitre", "", 40, Palette.UiText, TextAnchor.UpperCenter, new Vector2(0.5f, 1), new Vector2(0, -170), new Vector2(980, 190), true);
             bannerGroup.alpha = 0f;
         }
+
+        static readonly Color PauseColor = new Color(1f, 0.52f, 0.1f);
 
         GameObject pauseOverlay;
 
