@@ -390,6 +390,10 @@ namespace CraneBay.Game
             }
         }
 
+        /// <summary>Destination véhicule encore en approche (la grue doit attendre avant de déposer).</summary>
+        public bool IsArriving(Location to) =>
+            to.IsVehicle && TryGetVehicleView(to, out var view, out _) && view.Arriving;
+
         bool TryGetVehicleView(Location loc, out VehicleView view, out int cargoIndex)
         {
             view = null; cargoIndex = 0;
@@ -483,7 +487,10 @@ namespace CraneBay.Game
                 return to == from && ship.IsDocked && Model.Data.shipDocked && Model.Data.ship.CanPlace(to.index);
             if (to.IsVehicle)
             {
-                if (!TryGetVehicleView(to, out var view, out _) || !view.Docked) return false;
+                // Un véhicule en approche est déjà une destination valide : la grue
+                // attendra qu'il soit à quai pour déposer.
+                if (!TryGetVehicleView(to, out var view, out _) || !(view.Docked || view.Arriving)) return false;
+                return Model.CanDropAt(to, c, from, allowArriving: true);
             }
             return Model.CanDropAt(to, c, from);
         }
@@ -508,7 +515,7 @@ namespace CraneBay.Game
         {
             if (to.IsVehicle)
             {
-                if (TryGetVehicleView(to, out var view, out int idx)) return view.CargoWorld(idx);
+                if (TryGetVehicleView(to, out var view, out int idx)) return view.Docked ? view.CargoWorld(idx) : view.CargoDockWorld(idx);
                 return new Vector3(0f, BoardLayout.RoadY, 0f);
             }
             if (to.IsNone) return BoardLayout.CraneRest;
@@ -624,13 +631,13 @@ namespace CraneBay.Game
         /// <summary>Quel emplacement se trouve sous ce point du monde ?</summary>
         public Location HitTest(Vector2 p)
         {
-            // Véhicules à quai.
+            // Véhicules à quai, ou en approche (visés à leur emplacement d'arrêt).
             foreach (var kv in vehicleViews)
             {
                 var view = kv.Value;
-                if (!view.Docked) continue;
+                if (!view.Docked && !view.Arriving) continue;
                 for (int i = 0; i < view.CargoCount; i++)
-                    if (BoardLayout.Inside(p, view.CargoWorld(i), view.CargoHitSize))
+                    if (BoardLayout.Inside(p, view.Docked ? view.CargoWorld(i) : view.CargoDockWorld(i), view.CargoHitSize))
                         return kv.Key.kind == VehicleKind.Train ? new Location(LocationKind.Wagon, i) : new Location(LocationKind.Truck, kv.Key.bay);
             }
             // Parc.

@@ -29,6 +29,7 @@ static class Program
         UpcomingAndContracts();
         AmbienceThemesRecords();
         LevelUpWaitsForVehicles();
+        ArrivingVehicleTarget();
         Music();
         PauseAndIncome();
         StarsAndStreak();
@@ -327,6 +328,27 @@ static class Program
         m.UpdateVehicles(now + 1, rng);
         Check(ups == 1 && m.PlayerLevel == 2 && !m.LevelUpPending, "niveau validé quand plus aucun véhicule n'attend");
         Check(m.Data.yard.TotalCount() == 0, "terminal remis à zéro après validation");
+    }
+
+    /// <summary>Véhicule en approche : ciblable (ordre mémorisé), mais dépôt seulement une fois à quai.</summary>
+    static void ArrivingVehicleTarget()
+    {
+        var rng = new Random(5);
+        double now = 1_700_000_000;
+        var m = new PortModel(null, now);
+        m.UpdateShip(now + 2, rng);
+        Vehicle v = null;
+        for (int t = 0; t < 200 && v == null; t++) { m.nextVehicleUnix = now; v = m.UpdateVehicles(now, rng); }
+        Check(v != null && v.state == VehicleState.Arrivee, "véhicule annoncé, en approche");
+        var to = v.kind == VehicleKind.Train ? new Location(LocationKind.Wagon, 0) : new Location(LocationKind.Truck, v.bay);
+        var c = new ContainerInfo(999999, v.demands[0].color);
+        var other = new ContainerInfo(999998, (ContainerColor)(((int)v.demands[0].color + 1) % 5));
+        var from = new Location(LocationKind.Yard, 0);
+        Check(!m.CanDropAt(to, c, from), "pas de dépôt tant qu'il n'est pas à quai");
+        Check(m.CanDropAt(to, c, from, allowArriving: true), "mais l'ordre peut déjà le viser");
+        Check(!m.CanDropAt(to, other, from, allowArriving: true), "mauvaise couleur refusée même en approche");
+        m.MarkArrived(v, now + 2.2);
+        Check(m.CanDropAt(to, c, from), "dépôt possible une fois à quai");
     }
 
     /// <summary>Musique : boucle déterministe, sans saturation, avec un raccord sans claquement.</summary>

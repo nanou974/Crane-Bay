@@ -292,7 +292,9 @@ namespace CraneBay.Core
         }
 
         /// <summary>Peut-on déposer ce conteneur à cet endroit ?</summary>
-        public bool CanDropAt(Location to, ContainerInfo c, Location from)
+        /// <param name="allowArriving">Accepte aussi un véhicule encore en approche
+        /// (l'ordre est mémorisé, la grue attend qu'il soit à quai pour déposer).</param>
+        public bool CanDropAt(Location to, ContainerInfo c, Location from, bool allowArriving = false)
         {
             if (c == null || to == from) return false;
             switch (to.kind)
@@ -302,7 +304,8 @@ namespace CraneBay.Core
                 case LocationKind.Truck:
                 case LocationKind.Wagon:
                     if (!TryGetDemand(to, out var v, out var d)) return false;
-                    return v.state == VehicleState.EnAttente && !d.Filled && d.color == c.Color;
+                    bool open = v.state == VehicleState.EnAttente || (allowArriving && v.state == VehicleState.Arrivee);
+                    return open && !d.Filled && d.color == c.Color;
                 default:
                     return false; // on ne recharge pas le navire
             }

@@ -68,6 +68,9 @@ sifflements et détonations), une fanfare et une bannière qui annonce la prime 
   deux piles voisines.
 
 **Autres mécaniques :**
+- *Véhicule annoncé* : dès qu'un camion ou un train apparaît, son emplacement d'arrêt clignote au quai
+  avec les couleurs demandées. On peut déjà le viser : la grue prend le conteneur, se place au-dessus
+  et dépose dès que le véhicule est à quai (l'ordre n'est plus perdu).
 - *Commandes à venir* : le bandeau « À venir » montre les 3 prochains véhicules et leurs couleurs.
 - *Bonus rapidité* : +20 % si le conteneur est livré dans les 10 s après l'arrivée du véhicule.
 - *Contrats du jour* : 3 objectifs renouvelés chaque jour (ex. « livrer 5 rouges en train »), avec prime
