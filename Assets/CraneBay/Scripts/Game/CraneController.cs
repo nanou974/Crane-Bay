@@ -176,7 +176,8 @@ namespace CraneBay.Game
                     // La destination a pu devenir invalide (camion reparti...) : on se replie.
                     if (!game.CanDropNow(current.to, Carried.Info, current.from, this))
                         Retarget();
-                    if (MoveTo(game.DropPoint(current.to), dt, mult)) phase = Phase.LowerDrop;
+                    // Véhicule en approche : la grue se place au-dessus de son emplacement et attend.
+                    if (MoveTo(game.DropPoint(current.to), dt, mult) && !game.IsArriving(current.to)) phase = Phase.LowerDrop;
                     break;
 
                 case Phase.LowerDrop:
@@ -184,6 +185,7 @@ namespace CraneBay.Game
                     if (hoist >= 1f)
                     {
                         hoist = 1f;
+                        if (game.IsArriving(current.to)) break; // attend qu'il soit à quai
                         if (!game.CanDropNow(current.to, Carried.Info, current.from, this))
                         {
                             Retarget();

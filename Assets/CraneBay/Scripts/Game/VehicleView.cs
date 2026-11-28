@@ -15,6 +15,8 @@ namespace CraneBay.Game
         public Vehicle Model { get; private set; }
         public bool Docked { get; private set; }
         public bool Gone { get; private set; }
+        /// <summary>En approche : déjà annoncé et ciblable, pas encore à quai.</summary>
+        public bool Arriving => !Docked && !leaving && !Gone;
 
         readonly List<Transform> cargoAnchors = new List<Transform>();
         readonly List<GameObject> ghosts = new List<GameObject>();
@@ -23,6 +25,10 @@ namespace CraneBay.Game
         SpriteRenderer patienceFillSr;
         GameObject patienceRoot;
         TextMesh fastLabel;
+        // Emplacement réservé au quai, affiché pendant l'approche du véhicule.
+        GameObject dockMarker;
+        readonly List<SpriteRenderer> markerSprites = new List<SpriteRenderer>();
+        float dockY;
 
         float dockX, startX, exitX;
         float timer;
@@ -45,6 +51,7 @@ namespace CraneBay.Game
             view.Model = v;
             if (v.kind == VehicleKind.Train) view.BuildTrain();
             else view.BuildTruck(Palette.TruckCabs[rng.Next(Palette.TruckCabs.Length)]);
+            view.BuildDockMarker(parent);
             return view;
         }
 
@@ -54,6 +61,7 @@ namespace CraneBay.Game
             dockX = BoardLayout.TruckBayX[Model.bay];
             startX = 8.5f;
             exitX = -9f;
+            dockY = BoardLayout.RoadY;
             transform.position = new Vector3(startX, BoardLayout.RoadY, 0f);
 
             SpriteFactory.Make("Ombre", t, SpriteFactory.Shadow, Palette.Shadow, new Vector2(3.2f, 1.25f), new Vector3(-0.45f, -0.08f, 0f), 4);
@@ -75,6 +83,7 @@ namespace CraneBay.Game
             dockX = 0f; // le repère du train est aligné sur la voie
             startX = 11f;
             exitX = -15f;
+            dockY = BoardLayout.RailY;
             transform.position = new Vector3(startX, BoardLayout.RailY, 0f);
             float baseY = 0f;
 
@@ -117,6 +126,33 @@ namespace CraneBay.Game
             ghosts.Add(ghost);
         }
 
+        /// <summary>Marque au sol, à l'emplacement d'arrêt, de chaque place à remplir :
+        /// le joueur voit où le véhicule va s'arrêter et peut déjà le viser.</summary>
+        void BuildDockMarker(Transform parent)
+        {
+            dockMarker = new GameObject("EmplacementAnnonce");
+            dockMarker.transform.SetParent(parent, false);
+            dockMarker.transform.position = new Vector3(dockX, dockY, 0f);
+            for (int i = 0; i < cargoAnchors.Count; i++)
+            {
+                var col = Palette.Of(Model.demands[i].color);
+                col.a = 0.35f;
+                var lp = cargoAnchors[i].localPosition;
+                markerSprites.Add(SpriteFactory.Make("Place", dockMarker.transform, SpriteFactory.Container, col, BoardLayout.ContainerSize * 0.92f, lp, 3));
+                markerSprites.Add(SpriteFactory.Make("Contour", dockMarker.transform, SpriteFactory.Ring, Color.white, BoardLayout.ContainerSize + new Vector2(0.2f, 0.2f), lp, 3));
+            }
+        }
+
+        void HideDockMarker()
+        {
+            if (dockMarker == null) return;
+            Destroy(dockMarker);
+            dockMarker = null;
+            markerSprites.Clear();
+        }
+
+        void OnDestroy() => HideDockMarker();
+
         void BuildPatience(Transform t, Vector3 pos)
         {
             patienceRoot = new GameObject("Patience");
@@ -135,6 +171,14 @@ namespace CraneBay.Game
         {
             index = Mathf.Clamp(index, 0, cargoAnchors.Count - 1);
             return cargoAnchors[index].position;
+        }
+
+        /// <summary>Position monde de la place "index" une fois le véhicule à quai.</summary>
+        public Vector3 CargoDockWorld(int index)
+        {
+            index = Mathf.Clamp(index, 0, cargoAnchors.Count - 1);
+            var lp = cargoAnchors[index].localPosition;
+            return new Vector3(dockX + lp.x, dockY + lp.y, 0f);
         }
 
         public Vector2 CargoHitSize => BoardLayout.SlotHitSize;
@@ -183,12 +227,27 @@ namespace CraneBay.Game
                 float k = Mathf.Clamp01(timer / ArriveTime);
                 float e = 1f - (1f - k) * (1f - k);
                 SetX(Mathf.Lerp(startX, dockX, e));
+                PulseDockMarker();
                 if (k >= 1f)
                 {
                     Docked = true;
+                    HideDockMarker();
                     patienceRoot.SetActive(true);
                     OnDocked?.Invoke(this);
                 }
+            }
+        }
+
+        void PulseDockMarker()
+        {
+            float a = 0.55f + 0.45f * Mathf.Sin(Time.time * 9f);
+            for (int i = 0; i < markerSprites.Count; i++)
+            {
+                var sr = markerSprites[i];
+                if (sr == null) continue;
+                var c = sr.color;
+                c.a = (i % 2 == 0 ? 0.4f : 0.9f) * a;
+                sr.color = c;
             }
         }
 
