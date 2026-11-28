@@ -153,6 +153,7 @@ et copie le résultat en `Builds/Android/CraneBay_v<version>.apk` :
 ```powershell
 E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2            # APK seulement
 E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.2 -Release   # + préversion GitHub (gh auth login requis)
+E:\CraneBay-git\Tools\build-apk.ps1 -Version 0.1.6 -Release -Title "Bonus et séries" -NotesFile notes.md
 ```
 
 Le dossier utilisé par le script ne doit pas être ouvert dans l'éditeur Unity pendant le build :
