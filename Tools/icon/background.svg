@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="s" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#2F8FE8"/><stop offset="1" stop-color="#C9EBFF"/></linearGradient></defs>
+<rect width="512" height="512" fill="url(#s)"/>
+<g fill="#FFFFFF" opacity=".28"><path d="M150 150 L512 40 L512 120 Z"/><path d="M150 150 L512 230 L512 300 Z"/><path d="M150 150 L300 512 L400 512 Z"/></g>
+<circle cx="150" cy="150" r="80" fill="#FFF8D0" opacity=".35"/><circle cx="150" cy="150" r="48" fill="#FFF8D0"/>
+<g fill="#FFFFFF" opacity=".85"><ellipse cx="300" cy="420" rx="70" ry="20"/><ellipse cx="335" cy="405" rx="40" ry="20"/><ellipse cx="200" cy="440" rx="50" ry="15"/></g>
+<!-- portique bleu en contre-plongée -->
+<g stroke="#1F2433" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+ <path d="M0 150 L512 60 L512 112 L0 204 Z" fill="#2D4FA0"/>
+ <path d="M40 143 L40 197 M100 132 L100 186 M160 122 L160 175 M220 111 L220 165 M280 101 L280 154 M340 90 L340 144 M400 80 L400 133 M460 69 L460 122" fill="none" stroke="#5B7FD0" stroke-width="5"/>
+ <path d="M96 186 L120 512 L168 512 L140 178 Z" fill="#3D6BC9"/>
+ <path d="M420 92 L390 512 L432 512 L462 85 Z" fill="#E86A2A"/>
+</g>
+</svg>
